@@ -1,0 +1,72 @@
+{
+  "name": "file-preview",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Offline, read-only file preview tool for Windows",
+  "author": "Local Preview",
+  "license": "MIT",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "npm run build && electron .",
+    "dev:web": "vite --host 127.0.0.1",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "npm run typecheck && vite build && node scripts/copy-assets.mjs",
+    "build:win": "npm run build && electron-builder --win nsis zip --x64",
+    "build:dir": "npm run build && electron-builder --win --dir --x64",
+    "start": "electron .",
+    "test:smoke": "npm run build && electron scripts/smoke.cjs"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.0.12",
+    "jszip": "^3.10.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "vue-tsc": "^3.0.6",
+    "@aiden0z/pptx-renderer": "^1.2.4",
+    "@file-viewer/doc": "^3.0.3",
+    "@web-ppt/core": "^0.4.5",
+    "docx-preview": "^0.3.6",
+    "dompurify": "^3.4.15",
+    "exceljs": "^4.4.0",
+    "marked": "^18.0.12",
+    "pdfjs-dist": "^6.3.289",
+    "vue": "^3.5.21",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "build": {
+    "appId": "local.preview.desktop",
+    "productName": "File Preview",
+    "directories": {
+      "output": "outputs/release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "signAndEditExecutable": false
+    },
+    "artifactName": "FilePreview-${version}-Windows-x64.${ext}",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "FilePreview-Setup-${version}-x64.exe"
+    }
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
+  }
+}
