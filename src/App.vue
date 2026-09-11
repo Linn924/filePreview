@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, shallowRef } from "vue";
+import { onMounted, onBeforeUnmount, ref, shallowRef, nextTick } from "vue";
 import PreviewTab from "./components/PreviewTab.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { defaults, type Settings, type PreviewFile } from "../shared/contracts";
@@ -12,6 +12,39 @@ const error = ref("");
 const dragging = ref(false);
 let dragDepth = 0;
 let draggedTab = "";
+const tabMime = "application/x-file-preview-tab";
+const cleanups: Array<() => void> = [];
+function startDrag(event: DragEvent, id: string) {
+  draggedTab = id;
+  event.dataTransfer?.setData(tabMime, id);
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+}
+async function dropTab(event: DragEvent, before?: string) {
+  const id = event.dataTransfer?.getData(tabMime) || draggedTab;
+  if (!id) return false;
+  if (files.value.some((f) => f.id === id)) {
+    draggedTab = id;
+    if (before) reorder(before);
+    return true;
+  }
+  if (!isPreview) return true;
+  try {
+    const file = await window.localPreview.claim(id);
+    files.value = [...files.value, file];
+    active.value = id;
+    await nextTick();
+    try {
+      await window.localPreview.accept(id);
+    } catch (e) {
+      files.value = files.value.filter((f) => f.id !== id);
+      active.value = files.value[0]?.id || "";
+      throw e;
+    }
+  } catch (e) {
+    error.value = String(e);
+  }
+  return true;
+}
 let unsubscribe: (() => void) | undefined;
 const media = matchMedia("(prefers-color-scheme: dark)");
 function applyTheme() {
@@ -34,6 +67,7 @@ async function drop(event: DragEvent) {
   dragging.value = false;
   dragDepth = 0;
   try {
+    if (await dropTab(event)) return;
     if (event.dataTransfer?.files.length)
       await window.localPreview.drop(Array.from(event.dataTransfer.files));
   } catch (e) {
@@ -53,6 +87,7 @@ function leave() {
   }
 }
 function closeTab(id: string) {
+  window.localPreview.release(id);
   const index = files.value.findIndex((f) => f.id === id);
   files.value = files.value.filter((f) => f.id !== id);
   if (active.value === id)
@@ -94,6 +129,24 @@ onMounted(async () => {
     settings.value = value;
     applyTheme();
   });
+  cleanups.push(window.localPreview.onRemove(closeTab));
+  cleanups.push(
+    window.localPreview.onExport((id) => {
+      const file = files.value.find((f) => f.id === id);
+      if (!file) return;
+      const tab = document.querySelector(`[data-file-id="${id}"]`);
+      const zoom =
+        Number(
+          tab?.querySelector<HTMLInputElement>(".zoom-control input")?.value,
+        ) || 100;
+      const scroll = Array.from(
+        tab?.querySelectorAll<HTMLElement>(
+          ".pdf-scroll,.slide-scroll,.document-scroll,.table-wrap,.text-scroll,.image",
+        ) || [],
+      ).map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
+      window.localPreview.supply({ ...file, view: { zoom, scroll } });
+    }),
+  );
   if (isPreview) {
     files.value = await window.localPreview.consume();
     active.value = files.value[0]?.id || "";
@@ -104,6 +157,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", key);
   media.removeEventListener("change", applyTheme);
   unsubscribe?.();
+  cleanups.forEach((fn) => fn());
 });
 </script>
 <template>
@@ -114,10 +168,6 @@ onBeforeUnmount(() => {
     @drop.prevent="drop"
   >
     <header class="app-header">
-      <div class="brand">
-        <img src="/logo.png" alt="File Preview" class="app-logo" />
-        <h1>File Preview</h1>
-      </div>
       <button
         class="settings-button"
         aria-label="设置"
@@ -136,17 +186,17 @@ onBeforeUnmount(() => {
       </div>
     </section>
     <template v-else
-      ><nav v-if="files.length > 1" class="tabs" aria-label="文件标签">
+      ><nav v-if="files.length" class="tabs" aria-label="文件标签">
         <div
           v-for="file in files"
           :key="file.id"
           class="tab"
           :class="{ active: file.id === active }"
           draggable="true"
-          @dragstart="draggedTab = file.id"
+          @dragstart="startDrag($event, file.id)"
           @dragend="draggedTab = ''"
           @dragover.prevent
-          @drop.stop.prevent="reorder(file.id)"
+          @drop.stop.prevent="dropTab($event, file.id)"
         >
           <button :title="file.name" @click="active = file.id">
             {{ file.name }}</button
@@ -165,7 +215,6 @@ onBeforeUnmount(() => {
         :key="file.id"
         :file="file"
         :initial-zoom="settings.defaultZoom"
-        :wheel-zoom="settings.wheelZoom"
     /></template>
     <div v-if="error" class="action-error" role="alert">
       {{ error }}<button @click="error = ''">关闭</button>

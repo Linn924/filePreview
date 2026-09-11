@@ -20,8 +20,8 @@ const suite: Suite = async (c) => {
     await c.wheel(win, ".preview-content", -120);
     await c.check(
       win,
-      "text wheel zoom synchronized",
-      "document.querySelector('.zoom-control input').value==='110'",
+      "text wheel wheel does not zoom",
+      "document.querySelector('.zoom-control input').value==='100'",
     );
     c.close(win);
   }

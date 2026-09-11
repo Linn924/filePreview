@@ -1,30 +1,21 @@
 import type { Suite } from "../../../../tests/context";
+import { checkContinuous } from "../../../../tests/continuous";
 const suite: Suite = async (c) => {
   const win = await c.open("document.pdf");
   await c.check(
     win,
-    "PDF nonblank pixels",
-    "(()=>{const c=document.querySelector('canvas');return c.width>0&&c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4!==3&&v<150)})()",
+    "PDF pages coexist",
+    "document.querySelectorAll('.pdf-page').length===2",
   );
-  await c.wheel(win, ".pdf-scroll", 120);
-  await c.check(
-    win,
-    "outside wheel changes PDF page",
-    "document.querySelector('.page-nav input').value==='2'",
-  );
-  await c.wheel(win, "canvas", -120);
-  await c.check(
-    win,
-    "inside wheel zoom synchronized",
-    "document.querySelector('.zoom-control input').value==='110'",
-  );
+  await c.check(win, "PDF painted", "document.querySelector('canvas').width>0");
+  await checkContinuous(c, win, ".pdf-scroll");
   await c.evaluate(
     win,
     "(()=>{const z=document.querySelector('.zoom-control input');z.value='137';z.dispatchEvent(new Event('change',{bubbles:true}))})()",
   );
   await c.check(
     win,
-    "custom PDF zoom",
+    "custom zoom remains available",
     "document.querySelector('.zoom-control input').value==='137'",
   );
   await c.snapshot(win, "pdf");

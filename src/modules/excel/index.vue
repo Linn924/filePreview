@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageNavigation from "../../components/PageNavigation.vue";
 import type { PreviewProps } from "../types";
 import { usePreview } from "./usePreview";
 const props = defineProps<PreviewProps>();
@@ -9,6 +10,9 @@ const emit = defineEmits<{
 }>();
 const {
   pane,
+  scroll,
+  onScroll,
+  jump,
   book,
   sheetName,
   rowPage,
@@ -44,7 +48,7 @@ const {
         {{ name }}
       </button>
     </nav>
-    <div class="table-wrap">
+    <div ref="scroll" class="table-wrap" @scroll.passive="onScroll">
       <div
         v-if="rows.length"
         class="sheet-surface"
@@ -78,6 +82,7 @@ const {
             <tr
               v-for="row in rows"
               :key="row.r"
+              :data-row="row.r"
               :style="{ height: row.height + 'px' }"
             >
               <th>{{ row.r + 1 }}</th>
@@ -125,13 +130,13 @@ const {
           后 {{ pageCols }} 列
         </button>
       </div>
-      <div v-if="rowCount > pageRows">
-        <button :disabled="rowPage === 0" @click="rowPage--">上一页</button
-        ><span>{{ rowPage + 1 }} / {{ Math.ceil(rowCount / pageRows) }}</span
-        ><button :disabled="endRow >= rowCount" @click="rowPage++">
-          下一页
-        </button>
-      </div>
     </footer>
+    <PageNavigation
+      v-if="rowCount > pageRows"
+      :current="rowPage + 1"
+      :total="Math.ceil(rowCount / pageRows)"
+      label="行分组"
+      @jump="jump"
+    />
   </section>
 </template>

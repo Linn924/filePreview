@@ -602,3 +602,21 @@ button:hover {
   background: var(--well);
   color: var(--accent);
 }
+
+.app-header {
+  height: 42px;
+  justify-content: flex-end;
+  padding: 0 16px;
+}
+.settings-button {
+  font-size: 20px;
+}
+.page-nav {
+  gap: 20px;
+}
+.page-nav > div {
+  margin-left: auto;
+}
+.tabs {
+  min-height: 42px;
+}

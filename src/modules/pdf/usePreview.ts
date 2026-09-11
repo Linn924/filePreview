@@ -1,5 +1,4 @@
-import { useWheelPreview } from "../../composables/useWheelPreview";
-import { onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import {
   getDocument,
   GlobalWorkerOptions,
@@ -7,33 +6,24 @@ import {
   type RenderTask,
 } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import type { PreviewFile } from "../../types";
+import { useContinuousPages } from "../../composables/useContinuousPages";
 import type { PreviewProps, PreviewEmit } from "../types";
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   GlobalWorkerOptions.workerSrc = workerUrl;
-  const pane = ref<HTMLElement>();
-  useWheelPreview(pane, {
-    zoom: () => props.zoom,
-    enabled: () => props.wheelZoom !== false,
-    update: (value) => emit("update:zoom", value),
-    page: (direction) => {
-      current.value = Math.max(
-        1,
-        Math.min(pages.value, current.value + direction),
-      );
-    },
-  });
-  const canvas = ref<HTMLCanvasElement>();
   const scroll = ref<HTMLElement>();
-  const current = ref(1);
-  const pages = ref(0);
-  const rendering = ref(false);
-  let pdf: PDFDocumentProxy | undefined;
-  let task: RenderTask | undefined;
-  let revision = 0;
-  let disposed = false;
-  let observer: ResizeObserver | undefined;
-  let timer: ReturnType<typeof setTimeout>;
+  const layout = ref(0);
+  const pages = ref<Array<{ width: number; height: number }>>([]);
+  const elements = () =>
+    Array.from(scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") || []);
+  const { current, sync, jump } = useContinuousPages(scroll, elements);
+  let pdf: PDFDocumentProxy | undefined,
+    observer: IntersectionObserver | undefined,
+    resize: ResizeObserver | undefined;
+  let disposed = false,
+    revision = 0;
+  let queue = Promise.resolve();
+  const rendered = new Set<number>();
+  const tasks = new Set<RenderTask>();
   const base = new URL("./pdf-assets/", location.href).href;
   const load = getDocument({
     data: props.file.bytes.slice(),
@@ -43,76 +33,114 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     wasmUrl: base + "wasm/",
     useSystemFonts: true,
   });
-  async function render() {
-    if (!pdf || !canvas.value || disposed) return;
-    const token = ++revision;
-    const previous = task;
-    previous?.cancel();
-    try {
-      await previous?.promise;
-    } catch {}
-    if (token !== revision || disposed) return;
-    rendering.value = true;
-    try {
-      const page = await pdf.getPage(current.value);
-      if (token !== revision || disposed) return;
-      const original = page.getViewport({ scale: 1 });
-      const available = Math.max(200, (scroll.value?.clientWidth || 850) - 60);
-      const scale =
-        (Math.min(available / original.width, 1.5) * props.zoom) / 100;
-      const ratio = Math.min(devicePixelRatio, 2);
-      const viewport = page.getViewport({ scale: scale * ratio });
-      canvas.value.width = Math.ceil(viewport.width);
-      canvas.value.height = Math.ceil(viewport.height);
-      canvas.value.style.width = viewport.width / ratio + "px";
-      canvas.value.style.height = viewport.height / ratio + "px";
-      task = page.render({ canvas: canvas.value, viewport });
-      await task.promise;
-      if (token === revision && !disposed) {
-        emit("ready");
-        rendering.value = false;
-      }
-    } catch (e) {
-      if (
-        token === revision &&
-        !disposed &&
-        !(e instanceof Error && e.name === "RenderingCancelledException")
-      )
-        emit("error", "PDF 页面无法显示。" + String(e));
-    }
+  const scale = (width: number) =>
+    (Math.min(
+      Math.max(200, (scroll.value?.clientWidth || 850) - 60) / width,
+      1.5,
+    ) *
+      props.zoom) /
+    100;
+  function dimensions(index: number) {
+    void layout.value;
+    const p = pages.value[index],
+      s = scale(p.width);
+    return { width: p.width * s + "px", height: p.height * s + "px" };
+  }
+  function render(index: number) {
+    const token = revision;
+    queue = queue
+      .then(async () => {
+        if (disposed || token !== revision || rendered.has(index) || !pdf)
+          return;
+        const canvas = elements()[index]?.querySelector("canvas");
+        if (!canvas) return;
+        const page = await pdf.getPage(index + 1);
+        if (disposed || token !== revision) return;
+        const original = page.getViewport({ scale: 1 });
+        const ratio = Math.min(devicePixelRatio, 2);
+        const viewport = page.getViewport({
+          scale: scale(original.width) * ratio,
+        });
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const task = page.render({ canvas, viewport });
+        tasks.add(task);
+        try {
+          await task.promise;
+          if (token === revision) rendered.add(index);
+        } finally {
+          tasks.delete(task);
+        }
+      })
+      .catch((e) => {
+        if (!disposed && e?.name !== "RenderingCancelledException")
+          emit("error", "PDF 页面无法显示：" + String(e));
+      });
+    return queue;
+  }
+  function observe() {
+    observer?.disconnect();
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const i = Number((e.target as HTMLElement).dataset.page);
+          if (e.isIntersecting) void render(i);
+          else if (rendered.has(i)) {
+            const c = e.target.querySelector("canvas")!;
+            c.width = 0;
+            c.height = 0;
+            rendered.delete(i);
+          }
+        }
+      },
+      { root: scroll.value, rootMargin: "800px" },
+    );
+    elements().forEach((el) => observer!.observe(el));
+  }
+  async function refresh() {
+    layout.value++;
+    revision++;
+    tasks.forEach((t) => t.cancel());
+    await queue;
+    if (disposed) return;
+    rendered.clear();
+    await nextTick();
+    observe();
   }
   onMounted(async () => {
     try {
       pdf = await load.promise;
-      pages.value = pdf.numPages;
-      await render();
-      observer = new ResizeObserver(() => {
-        clearTimeout(timer);
-        timer = setTimeout(() => void render(), 120);
-      });
-      observer.observe(scroll.value!);
+      if (disposed) return;
+      const sizes = [];
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const p = await pdf.getPage(n);
+        if (disposed) return;
+        const v = p.getViewport({ scale: 1 });
+        sizes.push({ width: v.width, height: v.height });
+      }
+      pages.value = sizes;
+      await nextTick();
+      await render(0);
+      observe();
+      resize = new ResizeObserver(() => void refresh());
+      resize.observe(scroll.value!);
+      emit("ready");
     } catch (e) {
       if (!disposed)
-        emit(
-          "error",
-          e instanceof Error && e.name === "PasswordException"
-            ? "此 PDF 已加密，当前版本不支持加密文件。"
-            : "无法打开 PDF，文件可能损坏。",
-        );
+        emit("error", "无法打开 PDF，文件可能损坏或已加密。" + String(e));
     }
   });
-  watch([current, () => props.zoom], () => {
-    if (scroll.value) scroll.value.scrollTop = 0;
-    void render();
-  });
+  watch(
+    () => props.zoom,
+    () => void refresh(),
+  );
   onBeforeUnmount(() => {
     disposed = true;
     revision++;
-    clearTimeout(timer);
     observer?.disconnect();
-    task?.cancel();
+    resize?.disconnect();
+    tasks.forEach((t) => t.cancel());
     void load.destroy();
   });
-
-  return { pane, scroll, canvas, current, pages, rendering };
+  return { scroll, pages, current, sync, jump, dimensions };
 }

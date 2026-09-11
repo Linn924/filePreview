@@ -33,7 +33,7 @@ const emit = defineEmits<{ close: []; change: [value: Partial<Settings>] }>();
         </select>
       </div>
       <div class="setting-row">
-        <label for="close-action">点击窗口 × 时</label
+        <label for="close-action">关闭首页时</label
         ><select
           id="close-action"
           :value="settings.closeAction"
@@ -99,19 +99,7 @@ const emit = defineEmits<{ close: []; change: [value: Partial<Settings>] }>();
           "
         />
       </div>
-      <div class="setting-row">
-        <label for="wheel-zoom">在内容上滚轮缩放</label
-        ><input
-          id="wheel-zoom"
-          type="checkbox"
-          :checked="settings.wheelZoom"
-          @change="
-            emit('change', {
-              wheelZoom: ($event.target as HTMLInputElement).checked,
-            })
-          "
-        />
-      </div>
+
       <p class="settings-help">设置自动保存。文件和预览记录不会保存。</p>
     </section>
   </div>

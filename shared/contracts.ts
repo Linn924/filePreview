@@ -5,6 +5,7 @@ export interface PreviewFile {
   ext: string;
   bytes: Uint8Array;
   error: string;
+  view?: { zoom: number; scroll: Array<{ top: number; left: number }> };
 }
 export type Theme = "light" | "dark" | "system";
 export interface Settings {
@@ -13,7 +14,6 @@ export interface Settings {
   multiFileMode: "ask" | "tabs" | "windows";
   defaultZoom: number;
   maximizePreview: boolean;
-  wheelZoom: boolean;
 }
 export const defaults: Settings = {
   theme: "light",
@@ -21,7 +21,6 @@ export const defaults: Settings = {
   multiFileMode: "ask",
   defaultZoom: 100,
   maximizePreview: true,
-  wheelZoom: true,
 };
 export const extensions = [
   "docx",
@@ -70,11 +69,15 @@ export function normalizeSettings(
       typeof input.maximizePreview === "boolean"
         ? input.maximizePreview
         : base.maximizePreview,
-    wheelZoom:
-      typeof input.wheelZoom === "boolean" ? input.wheelZoom : base.wheelZoom,
   };
 }
 export interface DesktopBridge {
+  claim(id: string): Promise<PreviewFile>;
+  accept(id: string): Promise<void>;
+  release(id: string): void;
+  supply(file: PreviewFile): void;
+  onExport(handler: (id: string) => void): () => void;
+  onRemove(handler: (id: string) => void): () => void;
   select(): Promise<void>;
   drop(files: File[]): Promise<void>;
   consume(): Promise<PreviewFile[]>;

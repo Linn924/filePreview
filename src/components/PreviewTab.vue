@@ -1,19 +1,34 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, nextTick } from "vue";
 import { getPreviewModule } from "../modules";
 import ZoomControl from "./ZoomControl.vue";
 import { fileSize, type PreviewFile } from "../types";
 const props = defineProps<{
   file: PreviewFile;
   initialZoom: number;
-  wheelZoom: boolean;
 }>();
-const zoom = ref(props.initialZoom);
+const zoom = ref(props.file.view?.zoom ?? props.initialZoom);
 const error = ref(props.file.error);
 const ready = ref(false);
+async function loaded() {
+  ready.value = true;
+  await nextTick();
+  const root = document.querySelector(`[data-file-id="${props.file.id}"]`);
+  root
+    ?.querySelectorAll<HTMLElement>(
+      ".pdf-scroll,.slide-scroll,.document-scroll,.table-wrap,.text-scroll,.image",
+    )
+    .forEach((el, i) => {
+      const saved = props.file.view?.scroll[i];
+      if (saved) {
+        el.scrollTop = saved.top;
+        el.scrollLeft = saved.left;
+      }
+    });
+}
 </script>
 <template>
-  <section class="preview-tab">
+  <section class="preview-tab" :data-file-id="file.id">
     <div class="filebar">
       <span class="badge">{{ file.ext.toUpperCase() }}</span>
       <div class="filename">
@@ -32,9 +47,8 @@ const ready = ref(false);
         :is="getPreviewModule(file.ext)?.component"
         :file="file"
         :zoom="zoom"
-        :wheel-zoom="wheelZoom"
         @update:zoom="zoom = $event"
-        @ready="ready = true"
+        @ready="loaded"
         @error="
           error = $event;
           ready = true;

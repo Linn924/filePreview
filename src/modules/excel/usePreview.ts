@@ -1,6 +1,7 @@
-import { useWheelPreview } from "../../composables/useWheelPreview";
 import {
   computed,
+  nextTick,
+  watch,
   onMounted,
   onBeforeUnmount,
   ref,
@@ -13,20 +14,6 @@ import type { PreviewFile } from "../../types";
 import type { PreviewProps, PreviewEmit } from "../types";
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const pane = ref<HTMLElement>();
-  useWheelPreview(pane, {
-    zoom: () => props.zoom,
-    enabled: () => props.wheelZoom !== false,
-    update: (value) => emit("update:zoom", value),
-    page: (direction) => {
-      rowPage.value = Math.max(
-        0,
-        Math.min(
-          Math.ceil(rowCount.value / pageRows) - 1,
-          rowPage.value + direction,
-        ),
-      );
-    },
-  });
   const book = shallowRef<XLSX.WorkBook>();
   let styled: ExcelJS.Workbook | undefined;
   const sheetName = ref("");
@@ -69,11 +56,46 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   );
   const rowCount = computed(() => (range.value ? range.value.e.r + 1 : 0));
   const colCount = computed(() => (range.value ? range.value.e.c + 1 : 0));
-  const startRow = computed(() => rowPage.value * pageRows);
+  const startRow = computed(() => 0);
+  const visibleRows = ref(200);
+  const scroll = ref<HTMLElement>();
+  function onScroll() {
+    const el = scroll.value;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 500)
+      visibleRows.value = Math.min(
+        rowCount.value,
+        visibleRows.value + pageRows,
+      );
+    const top = el.getBoundingClientRect().top;
+    const rows = Array.from(el.querySelectorAll<HTMLElement>("tbody tr"));
+    const first = rows.find((r) => r.getBoundingClientRect().bottom > top + 28);
+    if (first) rowPage.value = Math.floor(Number(first.dataset.row) / pageRows);
+  }
+  async function jump(value: number) {
+    const page = Math.max(
+      1,
+      Math.min(Math.ceil(rowCount.value / pageRows), Math.floor(value) || 1),
+    );
+    visibleRows.value = Math.max(visibleRows.value, page * pageRows);
+    await nextTick();
+    const row = scroll.value?.querySelector<HTMLElement>(
+      `tr[data-row="${(page - 1) * pageRows}"]`,
+    );
+    if (row && scroll.value)
+      scroll.value.scrollTop +=
+        row.getBoundingClientRect().top -
+        scroll.value.getBoundingClientRect().top -
+        28;
+    rowPage.value = page - 1;
+  }
+  watch(sheetName, () => {
+    visibleRows.value = 200;
+    rowPage.value = 0;
+    if (scroll.value) scroll.value.scrollTop = 0;
+  });
   const startCol = computed(() => colPage.value * pageCols);
-  const endRow = computed(() =>
-    Math.min(rowCount.value, startRow.value + pageRows),
-  );
+  const endRow = computed(() => Math.min(rowCount.value, visibleRows.value));
   const endCol = computed(() =>
     Math.min(colCount.value, startCol.value + pageCols),
   );
@@ -382,6 +404,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
 
   return {
     pane,
+    scroll,
+    onScroll,
+    jump,
     book,
     sheetName,
     rowPage,

@@ -8,7 +8,6 @@ export interface PreviewModule {
 export interface PreviewProps {
   file: PreviewFile;
   zoom: number;
-  wheelZoom?: boolean;
 }
 export interface PreviewEmit {
   (event: "ready"): void;

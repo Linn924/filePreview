@@ -1,90 +1,58 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from "vue";
-import type { PreviewFile } from "../../types";
-import { useWheelPreview } from "../../composables/useWheelPreview";
+import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
+import type { PreviewProps } from "../types";
 import { openSlides, type SlidesRenderer } from "./renderer";
-const props = defineProps<{
-  file: PreviewFile;
-  zoom: number;
-  wheelZoom?: boolean;
-}>();
+import { snapshotSlide } from "./snapshot";
+import PageNavigation from "../../components/PageNavigation.vue";
+import { useContinuousPages } from "../../composables/useContinuousPages";
+const props = defineProps<PreviewProps>();
 const emit = defineEmits<{
   ready: [];
   error: [message: string];
   "update:zoom": [value: number];
 }>();
-const pane = ref<HTMLElement>(),
-  viewport = ref<HTMLElement>(),
+const viewport = ref<HTMLElement>(),
   host = ref<HTMLElement>();
-const current = ref(0),
-  count = ref(0),
-  busy = ref(false);
+const count = ref(0);
 let renderer: SlidesRenderer | undefined,
-  stage: HTMLElement,
-  observer: ResizeObserver | undefined;
-let disposed = false,
-  revision = 0;
-let queue = Promise.resolve();
-useWheelPreview(pane, {
-  zoom: () => props.zoom,
-  enabled: () => props.wheelZoom !== false,
-  update: (value) => emit("update:zoom", value),
-  page: (direction) => {
-    if (!busy.value)
-      current.value = Math.max(
-        0,
-        Math.min(count.value - 1, current.value + direction),
-      );
-  },
-});
+  observer: ResizeObserver | undefined,
+  disposed = false;
+let stage: HTMLElement;
+let pageElements: HTMLElement[] = [];
+const { current, sync, jump } = useContinuousPages(
+  viewport,
+  () => pageElements,
+);
 function fit() {
-  if (
-    !renderer ||
-    !viewport.value ||
-    !host.value ||
-    !viewport.value.clientWidth
-  )
-    return;
-  const ratio =
+  if (!renderer || !viewport.value?.clientWidth) return;
+  const scale = Math.max(
+    0.05,
     (Math.min(
       (viewport.value.clientWidth - 48) / renderer.width,
       (viewport.value.clientHeight - 48) / renderer.height,
     ) *
       props.zoom) /
-    100;
-  const scale = Math.max(0.05, ratio);
-  host.value.style.width = renderer.width * scale + "px";
-  host.value.style.height = renderer.height * scale + "px";
-  stage.style.width = renderer.width + "px";
-  stage.style.height = renderer.height + "px";
-  stage.style.transform = `scale(${scale})`;
-  stage.style.transformOrigin = "top left";
-}
-function render() {
-  const token = ++revision;
-  busy.value = true;
-  queue = queue
-    .then(async () => {
-      if (disposed || token !== revision || !renderer) return;
-      await renderer.render(current.value);
-      fit();
-    })
-    .catch((e) => {
-      if (!disposed) emit("error", "幻灯片无法显示：" + String(e));
-    })
-    .finally(() => {
-      if (token === revision) busy.value = false;
-    });
+      100,
+  );
+  for (const el of pageElements) {
+    el.style.width = renderer.width * scale + "px";
+    el.style.height = renderer.height * scale + "px";
+    const body = el.firstElementChild as HTMLElement;
+    body.style.width = renderer.width + "px";
+    body.style.height = renderer.height + "px";
+    body.style.transform = `scale(${scale})`;
+    body.style.transformOrigin = "top left";
+  }
 }
 onMounted(async () => {
   try {
     const shadow = host.value!.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent =
-      ":host{display:block;background:white}*{box-sizing:border-box}::-webkit-scrollbar{display:none}a{pointer-events:none}";
+      "*{box-sizing:border-box;scrollbar-width:none}::-webkit-scrollbar{display:none}a{pointer-events:none}.slide-page{position:relative;margin:0 auto 24px;background:white;overflow:hidden;box-shadow:0 3px 18px #0002}.render-stage{position:absolute;left:-100000px;top:0;visibility:hidden}";
     shadow.append(style);
     stage = document.createElement("div");
-    stage.className = "slide-stage";
+    stage.className = "render-stage";
     shadow.append(stage);
     renderer = await openSlides(props.file.bytes, props.file.ext, stage);
     if (disposed) {
@@ -92,43 +60,46 @@ onMounted(async () => {
       return;
     }
     count.value = renderer.count;
-    if (!count.value) throw new Error("没有可显示的幻灯片。");
-    await renderer.render(0);
-    fit();
+    for (let i = 0; i < count.value; i++) {
+      await renderer.render(i);
+      if (disposed) return;
+      const page = document.createElement("div");
+      page.className = "slide-page preview-content";
+      page.dataset.page = String(i);
+      const copy = snapshotSlide(stage, i);
+      page.append(copy);
+      shadow.insertBefore(page, stage);
+      pageElements.push(page);
+      fit();
+      await nextTick();
+    }
     observer = new ResizeObserver(fit);
     observer.observe(viewport.value!);
+    fit();
     emit("ready");
   } catch (e) {
-    if (!disposed)
-      emit(
-        "error",
-        "无法解析演示文稿，文件可能损坏、加密或不兼容。" + String(e),
-      );
+    if (!disposed) emit("error", "无法解析演示文稿：" + String(e));
   }
 });
-watch(current, render);
 watch(() => props.zoom, fit);
 onBeforeUnmount(() => {
   disposed = true;
   observer?.disconnect();
   renderer?.dispose();
+  pageElements = [];
+  host.value?.shadowRoot?.replaceChildren();
 });
 </script>
 <template>
-  <section ref="pane" class="presentation-pane">
-    <div ref="viewport" class="slide-scroll">
-      <div ref="host" class="slide-host preview-content"></div>
+  <section class="presentation-pane">
+    <div ref="viewport" class="slide-scroll" @scroll.passive="sync">
+      <div ref="host" class="slide-host"></div>
     </div>
-    <footer class="page-nav">
-      <span>幻灯片</span>
-      <div>
-        <button :disabled="current <= 0 || busy" @click="current--">
-          上一页</button
-        ><span class="page-indicator">{{ current + 1 }} / {{ count }}</span
-        ><button :disabled="current + 1 >= count || busy" @click="current++">
-          下一页
-        </button>
-      </div>
-    </footer>
+    <PageNavigation
+      :current="current"
+      :total="count"
+      label="幻灯片"
+      @jump="jump"
+    />
   </section>
 </template>

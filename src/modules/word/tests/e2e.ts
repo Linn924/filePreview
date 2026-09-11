@@ -1,3 +1,4 @@
+import { checkContinuous } from "../../../../tests/continuous";
 import type { Suite } from "../../../../tests/context";
 import { checkResize } from "../../../../tests/resize";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -29,8 +30,8 @@ const suite: Suite = async (c) => {
     );
     await c.check(
       win,
-      "Word zoom synchronized",
-      "document.querySelector('.zoom-control input').value==='110'",
+      "Word wheel does not zoom",
+      "document.querySelector('.zoom-control input').value==='100'",
     );
     await c.snapshot(win, name === "legacy.doc" ? "doc-legacy" : "word");
     c.close(win);
@@ -62,22 +63,10 @@ const suite: Suite = async (c) => {
   const pages = await c.open("pages.docx");
   await c.check(
     pages,
-    "DOCX real page count",
-    "document.querySelector('.page-indicator').textContent.trim()==='1 / 2'",
+    "DOCX pages coexist",
+    "document.querySelector('.word-host').shadowRoot.querySelectorAll('section.docx').length===2",
   );
-  await c.wheel(pages, ".document-scroll", 120);
-  await c.check(
-    pages,
-    "Word outside wheel updates page indicator",
-    "document.querySelector('.page-indicator').textContent.trim()==='2 / 2'",
-  );
-  await c.pause(250);
-  await c.wheel(pages, ".document-scroll", -120);
-  await c.check(
-    pages,
-    "Word wheel returns previous page",
-    "document.querySelector('.page-indicator').textContent.trim()==='1 / 2'",
-  );
+  await checkContinuous(c, pages, ".document-scroll");
   c.close(pages);
 };
 export default suite;

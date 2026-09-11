@@ -27,3 +27,13 @@
 .pdf-scroll {
   background: var(--well);
 }
+
+.pdf-page {
+  margin: 0 auto 24px;
+  background: white;
+  flex-shrink: 0;
+}
+.pdf-page canvas {
+  width: 100%;
+  height: 100%;
+}

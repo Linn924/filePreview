@@ -43,3 +43,11 @@
 .image {
   background-color: var(--well);
 }
+
+html[data-theme="dark"] .image {
+  background-image: none;
+  background-color: #252a32;
+}
+html[data-theme="dark"] .image img {
+  box-shadow: 0 2px 12px #0003;
+}

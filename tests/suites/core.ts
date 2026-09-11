@@ -10,8 +10,8 @@ const suite: Suite = async (c) => {
   );
   await c.check(
     c.home,
-    "user logo loaded",
-    "document.querySelector('.app-logo').naturalWidth > 0",
+    "internal brand removed",
+    "!document.querySelector('.app-logo,.brand')",
   );
   await c.click(c.home, ".settings-button");
   await c.evaluate(
@@ -95,8 +95,57 @@ const suite: Suite = async (c) => {
   await c.pause(700);
   if (!separate.every((win) => win.isMaximized()))
     throw Error("Preview window not maximized");
-  separate.forEach(c.close);
+  const beforeClose = prompts;
+  separate[0].close();
+  await c.pause(150);
+  if (
+    !separate[0].isDestroyed() ||
+    separate[1].isDestroyed() ||
+    prompts !== beforeClose
+  )
+    throw Error("Preview close must not prompt or close other windows");
+  c.close(separate[1]);
+  c.pass("preview X only closes its own window");
   c.pass("independent windows default maximized");
+  const source = await c.open("text.txt"),
+    target = await c.open("data.json");
+  if (source.getTitle() !== "文件预览" || c.home.getTitle() !== "文件预览")
+    throw Error("Chinese native title");
+  const id = await c.evaluate<string>(
+    source,
+    "document.querySelector('.preview-tab').dataset.fileId",
+  );
+  await c.evaluate(
+    source,
+    "(()=>{const z=document.querySelector('.zoom-control input');z.value='137';z.dispatchEvent(new Event('change',{bubbles:true}))})()",
+  );
+  await c.evaluate(
+    target,
+    `(()=>{const data=new DataTransfer();data.setData('application/x-file-preview-tab',${JSON.stringify(id)});document.querySelector('main').dispatchEvent(new DragEvent('drop',{dataTransfer:data,bubbles:true,cancelable:true}))})()`,
+  );
+  await c.check(
+    target,
+    "cross-window tab received",
+    "document.querySelectorAll('.tab').length===2&&document.querySelector('.tab.active').textContent.includes('text.txt')",
+  );
+  await c.check(
+    target,
+    "transfer retains custom zoom",
+    `document.querySelector('[data-file-id="${id}"] .zoom-control input').value==='137'`,
+  );
+  await c.pause(250);
+  if (!source.isDestroyed()) throw Error("Empty source window was not closed");
+  c.pass("successful transfer releases source window");
+  await c.evaluate(
+    target,
+    "(()=>{const data=new DataTransfer();data.setData('application/x-file-preview-tab','missing');document.querySelector('main').dispatchEvent(new DragEvent('drop',{dataTransfer:data,bubbles:true,cancelable:true}))})()",
+  );
+  await c.check(
+    target,
+    "failed transfer preserves target files",
+    "document.querySelectorAll('.tab').length===2&&!!document.querySelector('.action-error')",
+  );
+  c.close(target);
   c.program.updateSettings({ closeAction: "ask" });
   dialog.showMessageBox = (async () => {
     prompts++;

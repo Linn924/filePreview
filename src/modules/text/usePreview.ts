@@ -1,4 +1,3 @@
-import { useWheelPreview } from "../../composables/useWheelPreview";
 import { computed, onMounted, ref } from "vue";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -6,11 +5,6 @@ import type { PreviewFile } from "../../types";
 import type { PreviewProps, PreviewEmit } from "../types";
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const pane = ref<HTMLElement>();
-  useWheelPreview(pane, {
-    zoom: () => props.zoom,
-    enabled: () => props.wheelZoom !== false,
-    update: (value) => emit("update:zoom", value),
-  });
   const bytes = props.file.bytes;
   const encoding = ref(
     bytes[0] === 255 && bytes[1] === 254

@@ -1,16 +1,9 @@
-import { useWheelPreview } from "../../composables/useWheelPreview";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { attachTableResize } from "../../composables/resizeTable";
 import type { PreviewFile } from "../../types";
 import type { PreviewProps, PreviewEmit } from "../types";
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const pane = ref<HTMLElement>();
-  useWheelPreview(pane, {
-    zoom: () => props.zoom,
-    enabled: () => props.wheelZoom !== false,
-    update: (value) => emit("update:zoom", value),
-    page: (direction) => goPage(direction),
-  });
   const host = ref<HTMLElement>();
   const warning = ref("");
   let destroyed = false;
@@ -33,11 +26,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     });
     page.value = best + 1;
   }
-  function goPage(direction: number) {
-    const next = Math.max(
-      0,
-      Math.min(pages.length - 1, page.value - 1 + direction),
-    );
+  function jump(value: number) {
+    const next = Math.max(0, Math.min(pages.length - 1, Math.floor(value) - 1));
     pages[next]?.scrollIntoView({ block: "start" });
     page.value = next + 1;
   }
@@ -111,5 +101,5 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     host.value?.shadowRoot?.replaceChildren();
   });
 
-  return { pane, host, warning, page, pageCount, goPage };
+  return { pane, host, warning, page, pageCount, jump };
 }

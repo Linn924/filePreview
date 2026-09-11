@@ -1,3 +1,4 @@
+import { registerFiles, releaseWindow, setupTransfers } from "./transfers";
 import {
   app,
   BrowserWindow,
@@ -98,7 +99,7 @@ async function requestClose(win: BrowserWindow) {
     if (action === "ask") {
       const result = await dialog.showMessageBox(win, {
         type: "question",
-        title: "关闭 File Preview",
+        title: "关闭文件预览",
         message: "这次想怎样关闭？",
         detail: "退出会关闭所有预览。隐藏后可点击右下角托盘图标继续查看。",
         buttons: ["退出软件", "隐藏到托盘", "取消"],
@@ -119,14 +120,14 @@ async function requestClose(win: BrowserWindow) {
     closePrompt = false;
   }
 }
-function createWindow(preview: boolean, title = "File Preview") {
+function createWindow(preview: boolean) {
   const win = new BrowserWindow({
     width: preview ? 1200 : 960,
     height: preview ? 850 : 700,
     minWidth: 720,
     minHeight: 520,
     show: false,
-    title,
+    title: "文件预览",
     icon,
     backgroundColor: settings.get().theme === "dark" ? "#151b25" : "#f5f6f8",
     autoHideMenuBar: true,
@@ -149,13 +150,14 @@ function createWindow(preview: boolean, title = "File Preview") {
     }
   });
   win.on("close", (event) => {
-    if (!quitting && !forceClose.has(win.id)) {
+    if (!preview && !quitting && !forceClose.has(win.id)) {
       event.preventDefault();
       void requestClose(win);
     }
   });
   win.on("closed", () => {
     payloads.delete(id);
+    releaseWindow(id);
     forceClose.delete(win.id);
   });
   return win;
@@ -193,12 +195,7 @@ export async function openPaths(paths: string[], mode?: "tabs" | "windows") {
   for (const group of groups) {
     const files: PreviewFile[] = [];
     for (const name of group) files.push(await readPreviewFile(name));
-    const win = createWindow(
-      true,
-      files.length === 1
-        ? files[0].name + " — File Preview"
-        : `${files.length} 个文件 — File Preview`,
-    );
+    const win = createWindow(true);
     payloads.set(win.webContents.id, files);
     await win.loadURL("preview://local/index.html?preview=1");
     created.push(win);
@@ -241,6 +238,7 @@ export const ready = owner
         path.join(app.getPath("userData"), "preferences.json"),
       );
       Menu.setApplicationMenu(null);
+      setupTransfers();
       local = await createLocalSession(path.resolve(__dirname, "../dist"));
       ipcMain.handle("preview:select", async (event) => {
         trusted(event);
@@ -271,6 +269,7 @@ export const ready = owner
       ipcMain.handle("preview:consume", (event) => {
         trusted(event);
         const value = payloads.get(event.sender.id) || [];
+        registerFiles(event.sender.id, value);
         payloads.delete(event.sender.id);
         return value;
       });

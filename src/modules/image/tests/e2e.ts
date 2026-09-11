@@ -52,15 +52,24 @@ const suite: Suite = async (c) => {
     await c.wheel(win, ".image img", -120);
     await c.check(
       win,
-      "image zoom synchronized",
-      "document.querySelector('.zoom-control input').value==='110'",
+      "image wheel does not zoom",
+      "document.querySelector('.zoom-control input').value==='100'",
     );
     await c.check(
       win,
       "image zoom keeps fit baseline",
-      `Math.abs(document.querySelector('.image img').getBoundingClientRect().width/${width}-1.1)<0.03`,
+      `Math.abs(document.querySelector('.image img').getBoundingClientRect().width/${width}-1)<0.03`,
     );
     c.close(win);
   }
+  c.program.updateSettings({ theme: "dark" });
+  const dark = await c.open("vector.svg");
+  await c.check(
+    dark,
+    "dark image background has no bright grid",
+    "getComputedStyle(document.querySelector('.image')).backgroundImage==='none'&&getComputedStyle(document.querySelector('.image')).backgroundColor==='rgb(37, 42, 50)'",
+  );
+  await c.snapshot(dark, "image-dark");
+  c.close(dark);
 };
 export default suite;

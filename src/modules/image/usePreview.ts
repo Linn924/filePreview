@@ -1,14 +1,8 @@
-import { useWheelPreview } from "../../composables/useWheelPreview";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import DOMPurify from "dompurify";
 import type { PreviewProps, PreviewEmit } from "../types";
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const pane = ref<HTMLElement>();
-  useWheelPreview(pane, {
-    zoom: () => props.zoom,
-    enabled: () => props.wheelZoom !== false,
-    update: (value) => emit("update:zoom", value),
-  });
   const types: Record<string, string> = {
     jpg: "image/jpeg",
     jpeg: "image/jpeg",

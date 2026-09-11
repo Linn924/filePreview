@@ -26,15 +26,18 @@ const suite: Suite = async (c) => {
   await c.wheel(win, "table", -120);
   await c.check(
     win,
-    "Excel zoom synchronized",
-    "document.querySelector('.zoom-control input').value==='110'",
+    "Excel wheel does not zoom",
+    "document.querySelector('.zoom-control input').value==='100'",
   );
   await c.click(win, ".sheets button", "分页测试");
-  await c.wheel(win, ".table-wrap", 120);
+  await c.evaluate(
+    win,
+    "(()=>{const el=document.querySelector('.table-wrap');el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event('scroll'))})()",
+  );
   await c.check(
     win,
     "Excel outside wheel row page",
-    "document.querySelector('tbody th').textContent==='201'",
+    "document.querySelectorAll('tbody tr').length>200&&document.querySelector('tbody th').textContent==='1'",
   );
   await c.click(win, "footer button", "上一页");
   await c.click(win, "footer button", "后 100 列");

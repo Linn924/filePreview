@@ -1,6 +1,22 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge, Settings } from "../shared/contracts";
 const bridge: DesktopBridge = {
+  claim: (id) => ipcRenderer.invoke("tabs:claim", id),
+  accept: (id) => ipcRenderer.invoke("tabs:accept", id),
+  release: (id) => ipcRenderer.send("tabs:release", id),
+  supply: (file) => ipcRenderer.send("tabs:supply", file),
+  onExport: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, id: string) =>
+      handler(id);
+    ipcRenderer.on("tabs:export", listener);
+    return () => ipcRenderer.removeListener("tabs:export", listener);
+  },
+  onRemove: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, id: string) =>
+      handler(id);
+    ipcRenderer.on("tabs:remove", listener);
+    return () => ipcRenderer.removeListener("tabs:remove", listener);
+  },
   select: () => ipcRenderer.invoke("preview:select"),
   drop: (files) =>
     ipcRenderer.invoke(
