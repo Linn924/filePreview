@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
-import type { PreviewFile } from '../types'
+import type { PreviewFile } from '../../types'
 const props = defineProps<{ file: PreviewFile; zoom: number }>()
 const emit = defineEmits<{ ready: []; error: [message: string] }>()
 const bytes = props.file.bytes

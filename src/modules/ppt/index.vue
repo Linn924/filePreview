@@ -3,7 +3,7 @@ import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { PptxViewer } from '@aiden0z/pptx-renderer'
 import type { Presentation } from '@web-ppt/core'
 import DOMPurify from 'dompurify'
-import type { PreviewFile } from '../types'
+import type { PreviewFile } from '../../types'
 const props = defineProps<{ file: PreviewFile; zoom: number }>()
 const emit = defineEmits<{ ready: []; error: [message: string] }>()
 const host = ref<HTMLElement>()

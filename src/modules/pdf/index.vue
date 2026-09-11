@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import type { PreviewFile } from '../types'
+import type { PreviewFile } from '../../types'
 GlobalWorkerOptions.workerSrc = workerUrl
 const props = defineProps<{ file: PreviewFile; zoom: number }>()
 const emit = defineEmits<{ ready: []; error: [message: string] }>()

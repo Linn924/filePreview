@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref } from 'vue'
-import type { PreviewFile } from '../types'
+import type { PreviewFile } from '../../types'
 const props = defineProps<{ file: PreviewFile; zoom: number }>()
 const emit = defineEmits<{ ready: []; error: [message: string] }>()
 const host = ref<HTMLElement>()

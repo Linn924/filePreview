@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { onMounted, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { getPreviewModule } from './modules'
 import { fileSize, type PreviewFile } from './types'
-const DocumentPreview = defineAsyncComponent(() => import('./components/DocumentPreview.vue'))
-const SpreadsheetPreview = defineAsyncComponent(() => import('./components/SpreadsheetPreview.vue'))
-const PresentationPreview = defineAsyncComponent(() => import('./components/PresentationPreview.vue'))
-const PdfPreview = defineAsyncComponent(() => import('./components/PdfPreview.vue'))
-const TextPreview = defineAsyncComponent(() => import('./components/TextPreview.vue'))
-const ImagePreview = defineAsyncComponent(() => import('./components/ImagePreview.vue'))
 const isPreview = new URLSearchParams(location.search).has('preview')
 const file = shallowRef<PreviewFile>()
 const error = ref('')
@@ -44,12 +39,7 @@ function failed(message: string) { error.value = message; ready.value = true }
       <div v-if="error" class="error" role="alert"><strong>暂时无法预览</strong><p>{{ error }}</p><button @click="select">选择其他文件</button></div>
       <template v-else-if="file">
         <div v-if="!ready" class="loading" role="status">正在解析文件…</div>
-        <DocumentPreview v-if="['docx', 'doc'].includes(file.ext)" :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
-        <SpreadsheetPreview v-else-if="['xlsx', 'xls', 'csv', 'tsv'].includes(file.ext)" :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
-        <PresentationPreview v-else-if="['pptx', 'ppt'].includes(file.ext)" :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
-        <PdfPreview v-else-if="file.ext === 'pdf'" :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
-        <TextPreview v-else-if="['txt', 'text', 'json', 'md', 'log', 'xml'].includes(file.ext)" :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
-        <ImagePreview v-else :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
+        <component :is="getPreviewModule(file.ext)?.component" :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
       </template>
     </template>
     <div v-if="actionError" class="action-error" role="alert">{{ actionError }} <button @click="actionError = ''">关闭</button></div><div v-if="dragging" class="drag-overlay">松开鼠标，在新窗口中预览</div><div class="statusbar"><span>● 仅在本机处理 · 不保存文件和预览记录</span><span>{{ isPreview ? '关闭窗口即可释放预览' : '无需 Office · 无需联网' }}</span></div>

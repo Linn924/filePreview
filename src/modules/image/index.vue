@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import DOMPurify from 'dompurify'
-import type { PreviewFile } from '../types'
+import type { PreviewFile } from '../../types'
 const props = defineProps<{ file: PreviewFile; zoom: number }>()
 const emit = defineEmits<{ ready: []; error: [message: string] }>()
 const types: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' }

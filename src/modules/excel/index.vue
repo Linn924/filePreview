@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, shallowRef, type CSSProperties } from 'vue'
 import * as XLSX from 'xlsx'
 import ExcelJS from 'exceljs'
-import type { PreviewFile } from '../types'
+import type { PreviewFile } from '../../types'
 const props = defineProps<{ file: PreviewFile; zoom: number }>()
 const emit = defineEmits<{ ready: []; error: [message: string] }>()
 const book = shallowRef<XLSX.WorkBook>()
