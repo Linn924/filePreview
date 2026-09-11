@@ -1,39 +1,46 @@
 {
   "name": "file-preview",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "description": "Offline, read-only file preview tool for Windows",
-  "author": "Local Preview",
+  "author": "File Preview",
   "license": "MIT",
   "type": "module",
-  "main": "electron/main.cjs",
+  "main": "electron-dist/main.cjs",
   "scripts": {
     "dev": "npm run build && electron .",
     "dev:web": "vite --host 127.0.0.1",
-    "typecheck": "vue-tsc --noEmit",
-    "build": "npm run typecheck && vite build && node scripts/copy-assets.mjs",
+    "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.electron.json",
+    "build": "npm run typecheck && tsx scripts/icon.ts && tsx scripts/build-electron.ts && tsx scripts/associations.ts && vite build && tsx scripts/copy-assets.ts",
     "build:win": "npm run build && electron-builder --win nsis zip --x64",
     "build:dir": "npm run build && electron-builder --win --dir --x64",
     "start": "electron .",
-    "test:smoke": "npm run build && electron scripts/smoke.cjs"
+    "test:smoke": "npm test -- --suite all",
+    "test": "tsx tests/run.ts",
+    "test:fixtures": "tsx scripts/fixtures.ts",
+    "test:package": "tsx tests/package.ts"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.1",
-    "electron": "^44.3.0",
-    "electron-builder": "^26.0.12",
-    "jszip": "^3.10.1",
-    "typescript": "^5.9.2",
-    "vite": "^7.1.5",
-    "vue-tsc": "^3.0.6",
     "@aiden0z/pptx-renderer": "^1.2.4",
     "@file-viewer/doc": "^3.0.3",
+    "@types/node": "^25.9.6",
+    "@vitejs/plugin-vue": "^6.0.1",
     "@web-ppt/core": "^0.4.5",
     "docx-preview": "^0.3.6",
     "dompurify": "^3.4.15",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2",
     "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
     "marked": "^18.0.12",
     "pdfjs-dist": "^6.3.289",
+    "png-to-ico": "^3.0.2",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
     "vue": "^3.5.21",
+    "vue-tsc": "^3.0.6",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "build": {
@@ -44,7 +51,8 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*",
+      "electron-dist/*.cjs",
+      "assets/**/*",
       "package.json"
     ],
     "asar": true,
@@ -53,7 +61,9 @@
         "nsis",
         "zip"
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true,
+      "icon": "assets/icon.ico",
+      "signExecutable": false
     },
     "artifactName": "FilePreview-${version}-Windows-x64.${ext}",
     "nsis": {
@@ -61,7 +71,8 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "artifactName": "FilePreview-Setup-${version}-x64.exe"
+      "artifactName": "FilePreview-Setup-${version}-x64.exe",
+      "include": "electron-dist/associations.nsh"
     }
   },
   "overrides": {

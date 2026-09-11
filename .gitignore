@@ -7,3 +7,6 @@ work/
 .env
 .env.*
 !.env.example
+
+electron-dist/
+.test-build/

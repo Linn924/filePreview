@@ -1,0 +1,52 @@
+import { spawnSync } from "node:child_process";
+import { build } from "esbuild";
+import { mkdirSync } from "node:fs";
+import electron from "electron";
+const args = process.argv.slice(2);
+const index = args.indexOf("--suite");
+const selected = (index < 0 ? "all" : args[index + 1] || "").split(",");
+const names = ["core", "word", "excel", "ppt", "pdf", "text", "image"];
+if (selected.some((s) => s !== "all" && !names.includes(s)))
+  throw new Error("未知套件。支持：" + names.join(",") + " 或 all");
+const run = (command: string, params: string[], shell = false) => {
+  const result = spawnSync(command, params, {
+    stdio: "inherit",
+    shell,
+    env: process.env,
+  });
+  if (result.status !== 0) process.exit(result.status || 1);
+};
+if (!args.includes("--skip-build"))
+  run(
+    process.platform === "win32" ? "npm.cmd" : "npm",
+    ["run", "build"],
+    process.platform === "win32",
+  );
+run(process.execPath, ["--import", "tsx", "tests/unit.ts"]);
+mkdirSync(".test-build", { recursive: true });
+await build({
+  entryPoints: ["tests/electron.entry.ts"],
+  outfile: ".test-build/tests.cjs",
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  external: ["electron", "../electron-dist/main.cjs"],
+  target: "node22",
+});
+run(electron as unknown as string, [
+  ".test-build/tests.cjs",
+  "--suite",
+  selected.join(","),
+]);
+if (selected.includes("core") || selected.includes("all")) {
+  await build({
+    entryPoints: ["tests/quit.entry.ts"],
+    outfile: ".test-build/quit.cjs",
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    external: ["electron", "../electron-dist/main.cjs"],
+    target: "node22",
+  });
+  run(electron as unknown as string, [".test-build/quit.cjs"]);
+}

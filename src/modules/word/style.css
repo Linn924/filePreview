@@ -1,0 +1,35 @@
+.word {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.document-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+.document-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+.word-host {
+  min-width: max-content;
+}
+.word-host:empty {
+  min-width: 0;
+}
+.document-scroll .word-host {
+  padding-bottom: 12px;
+}
+.word-host .msdoc-page {
+  box-shadow: 0 3px 18px #1d2d491c;
+}
+.document-scroll {
+  background: var(--well);
+}
+.word-host {
+  padding-bottom: 0;
+}

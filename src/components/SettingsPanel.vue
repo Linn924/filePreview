@@ -1,0 +1,118 @@
+<script setup lang="ts">
+import type { Settings } from "../../shared/contracts";
+defineProps<{ settings: Settings }>();
+const emit = defineEmits<{ close: []; change: [value: Partial<Settings>] }>();
+</script>
+<template>
+  <div class="modal-backdrop" @click.self="emit('close')">
+    <section
+      class="settings-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="设置"
+    >
+      <header>
+        <h2>设置</h2>
+        <button aria-label="关闭设置" @click="emit('close')">×</button>
+      </header>
+      <div class="setting-row">
+        <label for="theme">外观</label
+        ><select
+          id="theme"
+          :value="settings.theme"
+          @change="
+            emit('change', {
+              theme: ($event.target as HTMLSelectElement)
+                .value as Settings['theme'],
+            })
+          "
+        >
+          <option value="light">白天</option>
+          <option value="dark">黑夜</option>
+          <option value="system">跟随系统</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="close-action">点击窗口 × 时</label
+        ><select
+          id="close-action"
+          :value="settings.closeAction"
+          @change="
+            emit('change', {
+              closeAction: ($event.target as HTMLSelectElement)
+                .value as Settings['closeAction'],
+            })
+          "
+        >
+          <option value="ask">每次询问</option>
+          <option value="quit">退出软件</option>
+          <option value="tray">隐藏到右下角托盘</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="multi-mode">同时打开多个文件</label
+        ><select
+          id="multi-mode"
+          :value="settings.multiFileMode"
+          @change="
+            emit('change', {
+              multiFileMode: ($event.target as HTMLSelectElement)
+                .value as Settings['multiFileMode'],
+            })
+          "
+        >
+          <option value="ask">下次打开时询问</option>
+          <option value="tabs">一个窗口，标签切换</option>
+          <option value="windows">每个文件一个窗口</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="default-zoom">新文件默认缩放</label
+        ><select
+          id="default-zoom"
+          :value="settings.defaultZoom"
+          @change="
+            emit('change', {
+              defaultZoom: Number(($event.target as HTMLSelectElement).value),
+            })
+          "
+        >
+          <option
+            v-for="value in [50, 75, 100, 125, 150, 200]"
+            :key="value"
+            :value="value"
+          >
+            {{ value }}%{{ value === 100 ? "（适配）" : "" }}
+          </option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="maximize">预览窗口默认最大化</label
+        ><input
+          id="maximize"
+          type="checkbox"
+          :checked="settings.maximizePreview"
+          @change="
+            emit('change', {
+              maximizePreview: ($event.target as HTMLInputElement).checked,
+            })
+          "
+        />
+      </div>
+      <div class="setting-row">
+        <label for="wheel-zoom">在内容上滚轮缩放</label
+        ><input
+          id="wheel-zoom"
+          type="checkbox"
+          :checked="settings.wheelZoom"
+          @change="
+            emit('change', {
+              wheelZoom: ($event.target as HTMLInputElement).checked,
+            })
+          "
+        />
+      </div>
+      <p class="settings-help">设置自动保存。文件和预览记录不会保存。</p>
+    </section>
+  </div>
+</template>

@@ -1,47 +1,181 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, shallowRef } from 'vue'
-import { getPreviewModule } from './modules'
-import { fileSize, type PreviewFile } from './types'
-const isPreview = new URLSearchParams(location.search).has('preview')
-const file = shallowRef<PreviewFile>()
-const error = ref('')
-const actionError = ref('')
-const dragging = ref(false)
-let dragDepth = 0
-const zoom = ref(100)
-const ready = ref(false)
-async function select() { try { actionError.value = ''; await window.localPreview.select() } catch (e) { actionError.value = String(e).replace(/^Error:.*?: /, '') } }
-async function drop(event: DragEvent) {
-  dragging.value = false; dragDepth = 0
-  try { actionError.value = ''; await window.localPreview.drop(Array.from(event.dataTransfer?.files || [])) }
-  catch (e) { actionError.value = String(e) }
+import { onMounted, onBeforeUnmount, ref, shallowRef } from "vue";
+import PreviewTab from "./components/PreviewTab.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
+import { defaults, type Settings, type PreviewFile } from "../shared/contracts";
+const isPreview = new URLSearchParams(location.search).has("preview");
+const files = shallowRef<PreviewFile[]>([]);
+const active = ref("");
+const settings = ref<Settings>({ ...defaults });
+const showSettings = ref(false);
+const error = ref("");
+const dragging = ref(false);
+let dragDepth = 0;
+let draggedTab = "";
+let unsubscribe: (() => void) | undefined;
+const media = matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  document.documentElement.dataset.theme =
+    settings.value.theme === "system"
+      ? media.matches
+        ? "dark"
+        : "light"
+      : settings.value.theme;
 }
-function enter(event: DragEvent) { if (event.dataTransfer?.types.includes('Files')) { dragDepth++; dragging.value = true } }
-function leave() { if (--dragDepth <= 0) { dragDepth = 0; dragging.value = false } }
-function key(event: KeyboardEvent) { if (event.ctrlKey && event.key.toLowerCase() === 'o') { event.preventDefault(); void select() } }
-onMounted(async () => {
-  window.addEventListener('keydown', key)
-  if (isPreview) {
-    file.value = await window.localPreview.consume()
-    if (!file.value) error.value = '此预览已释放。请重新选择文件。'
-    else if (file.value.error) error.value = file.value.error
+async function select() {
+  try {
+    error.value = "";
+    await window.localPreview.select();
+  } catch (e) {
+    error.value = String(e);
   }
-})
-onBeforeUnmount(() => window.removeEventListener('keydown', key))
-function failed(message: string) { error.value = message; ready.value = true }
+}
+async function drop(event: DragEvent) {
+  dragging.value = false;
+  dragDepth = 0;
+  try {
+    if (event.dataTransfer?.files.length)
+      await window.localPreview.drop(Array.from(event.dataTransfer.files));
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+function enter(event: DragEvent) {
+  if (event.dataTransfer?.types.includes("Files")) {
+    dragDepth++;
+    dragging.value = true;
+  }
+}
+function leave() {
+  if (--dragDepth <= 0) {
+    dragDepth = 0;
+    dragging.value = false;
+  }
+}
+function closeTab(id: string) {
+  const index = files.value.findIndex((f) => f.id === id);
+  files.value = files.value.filter((f) => f.id !== id);
+  if (active.value === id)
+    active.value =
+      files.value[Math.min(index, files.value.length - 1)]?.id || "";
+  if (!files.value.length) window.localPreview.close();
+}
+function reorder(id: string) {
+  if (!draggedTab || draggedTab === id) return;
+  const list = [...files.value];
+  const from = list.findIndex((f) => f.id === draggedTab),
+    to = list.findIndex((f) => f.id === id);
+  if (from < 0 || to < 0) return;
+  list.splice(to, 0, list.splice(from, 1)[0]);
+  files.value = list;
+  draggedTab = "";
+}
+async function save(value: Partial<Settings>) {
+  try {
+    settings.value = await window.localPreview.setSettings(value);
+    applyTheme();
+  } catch {
+    error.value = "设置保存失败，请稍后重试。";
+  }
+}
+function key(event: KeyboardEvent) {
+  if (event.ctrlKey && event.key.toLowerCase() === "o") {
+    event.preventDefault();
+    void select();
+  }
+  if (event.key === "Escape") showSettings.value = false;
+}
+onMounted(async () => {
+  window.addEventListener("keydown", key);
+  media.addEventListener("change", applyTheme);
+  settings.value = await window.localPreview.getSettings();
+  applyTheme();
+  unsubscribe = window.localPreview.onSettings((value) => {
+    settings.value = value;
+    applyTheme();
+  });
+  if (isPreview) {
+    files.value = await window.localPreview.consume();
+    active.value = files.value[0]?.id || "";
+    if (!files.value.length) error.value = "预览已释放，请重新打开文件。";
+  }
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", key);
+  media.removeEventListener("change", applyTheme);
+  unsubscribe?.();
+});
 </script>
 <template>
-  <main @dragenter.prevent="enter" @dragleave.prevent="leave" @dragover.prevent @drop.prevent="drop">
-    <header v-if="!isPreview"><div class="brand"><span class="logo">▤</span><div><h1>File Preview</h1><p>FILE PREVIEW</p></div></div><span class="privacy"><i></i> 离线 · 只读</span><button class="primary" @click="select">选择文件</button></header>
-    <section v-if="!isPreview" class="welcome"><div class="eyebrow">只看文件，简单一点</div><h2>打开文件，<br>在独立窗口中预览。</h2><p>保留文档原有的文字、图片与排版。</p><button class="dropzone" @click="select"><span class="file-icon">↥</span><strong>拖拽文件到这里</strong><span>或点击选择文件 · Ctrl + O</span><small>支持多文件，每个文件在新窗口中打开</small></button><div class="formats"><span>▤ Word</span><span>▦ Excel</span><span>▧ PPT</span><span>▥ PDF</span><span>▣ 图片</span><span>≡ 文本</span></div></section>
-    <template v-else>
-      <section class="filebar"><span class="badge">{{ file?.ext.toUpperCase() || 'FILE' }}</span><div class="filename"><strong :title="file?.name">{{ file?.name || '正在打开…' }}</strong><small v-if="file">{{ fileSize(file.size) }} · 只读预览</small></div><label v-if="file && !error" class="zoom-label">缩放 <select v-model.number="zoom" aria-label="缩放"><option v-for="z in [50, 75, 100, 125, 150, 200]" :key="z" :value="z">{{ z }}%</option></select></label><button class="quiet" @click="select">打开其他文件</button></section>
-      <div v-if="error" class="error" role="alert"><strong>暂时无法预览</strong><p>{{ error }}</p><button @click="select">选择其他文件</button></div>
-      <template v-else-if="file">
-        <div v-if="!ready" class="loading" role="status">正在解析文件…</div>
-        <component :is="getPreviewModule(file.ext)?.component" :file="file" :zoom="zoom" @ready="ready = true" @error="failed" />
-      </template>
-    </template>
-    <div v-if="actionError" class="action-error" role="alert">{{ actionError }} <button @click="actionError = ''">关闭</button></div><div v-if="dragging" class="drag-overlay">松开鼠标，在新窗口中预览</div><div class="statusbar"><span>● 仅在本机处理 · 不保存文件和预览记录</span><span>{{ isPreview ? '关闭窗口即可释放预览' : '无需 Office · 无需联网' }}</span></div>
+  <main
+    @dragenter.prevent="enter"
+    @dragleave.prevent="leave"
+    @dragover.prevent
+    @drop.prevent="drop"
+  >
+    <header class="app-header">
+      <div class="brand">
+        <img src="/logo.png" alt="File Preview" class="app-logo" />
+        <h1>File Preview</h1>
+      </div>
+      <button
+        class="settings-button"
+        aria-label="设置"
+        @click="showSettings = true"
+      >
+        ⚙
+      </button>
+    </header>
+    <section v-if="!isPreview" class="welcome">
+      <button class="dropzone" @click="select">
+        <span class="file-icon">↥</span><strong>拖入文件或点击打开</strong>
+      </button>
+      <div class="formats">
+        <span>Word</span><span>Excel</span><span>PowerPoint</span
+        ><span>PDF</span><span>图片</span><span>文本</span>
+      </div>
+    </section>
+    <template v-else
+      ><nav v-if="files.length > 1" class="tabs" aria-label="文件标签">
+        <div
+          v-for="file in files"
+          :key="file.id"
+          class="tab"
+          :class="{ active: file.id === active }"
+          draggable="true"
+          @dragstart="draggedTab = file.id"
+          @dragend="draggedTab = ''"
+          @dragover.prevent
+          @drop.stop.prevent="reorder(file.id)"
+        >
+          <button :title="file.name" @click="active = file.id">
+            {{ file.name }}</button
+          ><button
+            class="tab-close"
+            :aria-label="'关闭 ' + file.name"
+            @click="closeTab(file.id)"
+          >
+            ×
+          </button>
+        </div>
+      </nav>
+      <PreviewTab
+        v-for="file in files"
+        v-show="file.id === active"
+        :key="file.id"
+        :file="file"
+        :initial-zoom="settings.defaultZoom"
+        :wheel-zoom="settings.wheelZoom"
+    /></template>
+    <div v-if="error" class="action-error" role="alert">
+      {{ error }}<button @click="error = ''">关闭</button>
+    </div>
+    <div v-if="dragging" class="drag-overlay">松开鼠标，打开文件</div>
+    <SettingsPanel
+      v-if="showSettings"
+      :settings="settings"
+      @close="showSettings = false"
+      @change="save"
+    />
   </main>
 </template>

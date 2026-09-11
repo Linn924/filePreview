@@ -1,69 +1,134 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import type { PptxViewer } from '@aiden0z/pptx-renderer'
-import type { Presentation } from '@web-ppt/core'
-import DOMPurify from 'dompurify'
-import type { PreviewFile } from '../../types'
-const props = defineProps<{ file: PreviewFile; zoom: number }>()
-const emit = defineEmits<{ ready: []; error: [message: string] }>()
-const host = ref<HTMLElement>()
-const current = ref(0)
-const count = ref(0)
-const busy = ref(false)
-let viewer: PptxViewer | undefined
-let legacy: Presentation | undefined
-let renderLegacy: typeof import('@web-ppt/core').renderSlideToSvg
-let disposed = false
-let observer: ResizeObserver | undefined
+import { onMounted, onBeforeUnmount, ref, watch } from "vue";
+import type { PreviewFile } from "../../types";
+import { useWheelPreview } from "../../composables/useWheelPreview";
+import { openSlides, type SlidesRenderer } from "./renderer";
+const props = defineProps<{
+  file: PreviewFile;
+  zoom: number;
+  wheelZoom?: boolean;
+}>();
+const emit = defineEmits<{
+  ready: [];
+  error: [message: string];
+  "update:zoom": [value: number];
+}>();
+const pane = ref<HTMLElement>(),
+  viewport = ref<HTMLElement>(),
+  host = ref<HTMLElement>();
+const current = ref(0),
+  count = ref(0),
+  busy = ref(false);
+let renderer: SlidesRenderer | undefined,
+  stage: HTMLElement,
+  observer: ResizeObserver | undefined;
+let disposed = false,
+  revision = 0;
+let queue = Promise.resolve();
+useWheelPreview(pane, {
+  zoom: () => props.zoom,
+  enabled: () => props.wheelZoom !== false,
+  update: (value) => emit("update:zoom", value),
+  page: (direction) => {
+    if (!busy.value)
+      current.value = Math.max(
+        0,
+        Math.min(count.value - 1, current.value + direction),
+      );
+  },
+});
 function fit() {
-  if (!host.value || (!viewer && !legacy)) return
-  const container = host.value.parentElement!
-  const availableWidth = container.clientWidth - 48
-  const availableHeight = container.clientHeight - 48
-  const width = viewer?.slideWidth || legacy!.width
-  const height = viewer?.slideHeight || legacy!.height
-  host.value.style.width = Math.max(200, Math.min(availableWidth, availableHeight * width / height)) + 'px'
+  if (
+    !renderer ||
+    !viewport.value ||
+    !host.value ||
+    !viewport.value.clientWidth
+  )
+    return;
+  const ratio =
+    (Math.min(
+      (viewport.value.clientWidth - 48) / renderer.width,
+      (viewport.value.clientHeight - 48) / renderer.height,
+    ) *
+      props.zoom) /
+    100;
+  const scale = Math.max(0.05, ratio);
+  host.value.style.width = renderer.width * scale + "px";
+  host.value.style.height = renderer.height * scale + "px";
+  stage.style.width = renderer.width + "px";
+  stage.style.height = renderer.height + "px";
+  stage.style.transform = `scale(${scale})`;
+  stage.style.transformOrigin = "top left";
 }
-async function render() {
-  if (disposed || !host.value) return
-  busy.value = true
-  try {
-    if (viewer) { await viewer.goToSlide(current.value); await viewer.setZoom(props.zoom) }
-    else if (legacy) {
-      // Only static content; strip active/interactive elements from imported slides.
-      host.value.innerHTML = DOMPurify.sanitize(renderLegacy(legacy, legacy.slides[current.value], { media: 'badge', textMode: 'svg' }), { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'audio', 'video'] })
-      const svg = host.value.querySelector('svg')
-      if (svg) { svg.style.width = props.zoom + '%'; svg.style.height = 'auto'; svg.style.display = 'block' }
-    }
-  } catch (e) { emit('error', '无法绘制幻灯片：' + String(e)) }
-  finally { busy.value = false }
+function render() {
+  const token = ++revision;
+  busy.value = true;
+  queue = queue
+    .then(async () => {
+      if (disposed || token !== revision || !renderer) return;
+      await renderer.render(current.value);
+      fit();
+    })
+    .catch((e) => {
+      if (!disposed) emit("error", "幻灯片无法显示：" + String(e));
+    })
+    .finally(() => {
+      if (token === revision) busy.value = false;
+    });
 }
 onMounted(async () => {
   try {
-    host.value!.addEventListener('click', event => { if ((event.target as Element).closest('a')) event.preventDefault() })
-    if (props.file.ext === 'pptx') {
-      const { PptxViewer, RECOMMENDED_ZIP_LIMITS } = await import('@aiden0z/pptx-renderer')
-      if (disposed) return
-      viewer = await PptxViewer.open(props.file.bytes.slice().buffer, host.value!, { renderMode: 'slide', fitMode: 'contain', zipLimits: RECOMMENDED_ZIP_LIMITS, lazySlides: true, lazyMedia: true, pdfjs: false })
-      count.value = viewer.slideCount
-      fit()
-      observer = new ResizeObserver(() => fit())
-      observer.observe(host.value!.parentElement!)
-    } else {
-      const engine = await import('@web-ppt/core')
-      renderLegacy = engine.renderSlideToSvg
-      legacy = await engine.parse(props.file.bytes)
-      count.value = legacy.slides.length
-      fit()
-      observer = new ResizeObserver(() => fit())
-      observer.observe(host.value!.parentElement!)
-      await render()
+    const shadow = host.value!.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent =
+      ":host{display:block;background:white}*{box-sizing:border-box}::-webkit-scrollbar{display:none}a{pointer-events:none}";
+    shadow.append(style);
+    stage = document.createElement("div");
+    stage.className = "slide-stage";
+    shadow.append(stage);
+    renderer = await openSlides(props.file.bytes, props.file.ext, stage);
+    if (disposed) {
+      renderer.dispose();
+      return;
     }
-    if (!count.value) throw new Error('文稿中没有可显示的幻灯片。')
-    if (!disposed) emit('ready')
-  } catch (e) { if (!disposed) emit('error', '无法解析演示文稿，文件可能损坏、加密或不兼容。' + (e instanceof Error ? ` ${e.message}` : '')) }
-})
-watch([current, () => props.zoom], () => void render())
-onBeforeUnmount(() => { disposed = true; observer?.disconnect(); viewer?.destroy(); legacy?.dispose?.() })
+    count.value = renderer.count;
+    if (!count.value) throw new Error("没有可显示的幻灯片。");
+    await renderer.render(0);
+    fit();
+    observer = new ResizeObserver(fit);
+    observer.observe(viewport.value!);
+    emit("ready");
+  } catch (e) {
+    if (!disposed)
+      emit(
+        "error",
+        "无法解析演示文稿，文件可能损坏、加密或不兼容。" + String(e),
+      );
+  }
+});
+watch(current, render);
+watch(() => props.zoom, fit);
+onBeforeUnmount(() => {
+  disposed = true;
+  observer?.disconnect();
+  renderer?.dispose();
+});
 </script>
-<template><section class="presentation-pane"><div class="slide-scroll"><div ref="host" class="slide-host"></div></div><footer class="page-nav"><span>{{ busy ? '正在绘制…' : '幻灯片预览' }}</span><div><button :disabled="current <= 0 || busy" @click="current--">上一页</button><span>{{ current + 1 }} / {{ count }}</span><button :disabled="current + 1 >= count || busy" @click="current++">下一页</button></div></footer></section></template>
+<template>
+  <section ref="pane" class="presentation-pane">
+    <div ref="viewport" class="slide-scroll">
+      <div ref="host" class="slide-host preview-content"></div>
+    </div>
+    <footer class="page-nav">
+      <span>幻灯片</span>
+      <div>
+        <button :disabled="current <= 0 || busy" @click="current--">
+          上一页</button
+        ><span class="page-indicator">{{ current + 1 }} / {{ count }}</span
+        ><button :disabled="current + 1 >= count || busy" @click="current++">
+          下一页
+        </button>
+      </div>
+    </footer>
+  </section>
+</template>

@@ -1,0 +1,104 @@
+.text {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 18px 24px;
+  background: white;
+  border: 1px solid #e0e5ed;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.text-tools {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid #e5e9ef;
+  color: #8a96a7;
+  font-size: 12px;
+  align-items: center;
+}
+.text pre {
+  margin: 0;
+  padding: 24px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  font-family: Consolas, "Microsoft YaHei", monospace;
+  font-size: 13px;
+}
+.text-scroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.text pre {
+  overflow: visible;
+  white-space: pre-wrap;
+}
+.markdown {
+  padding: 32px 48px;
+  max-width: 1000px;
+  margin: auto;
+  line-height: 1.75;
+}
+.markdown h1 {
+  font-size: 2em;
+}
+.markdown h2 {
+  text-align: left;
+  font-size: 1.5em;
+  margin: 22px 0 10px;
+}
+.markdown img {
+  max-width: 100%;
+}
+.markdown pre {
+  background: #f2f4f7;
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+}
+.markdown code {
+  font-family: Consolas, monospace;
+}
+.markdown blockquote {
+  margin: 14px 0;
+  padding: 4px 18px;
+  border-left: 3px solid #b7c7df;
+  color: #66788d;
+}
+.markdown table {
+  width: auto;
+}
+.markdown th {
+  color: #435067;
+}
+@media (max-width: 850px) {
+  .markdown {
+    padding: 24px;
+  }
+}
+.text {
+  background: var(--panel);
+  border-color: var(--line);
+}
+.text-tools {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.text pre,
+.markdown {
+  color: var(--text);
+}
+.markdown pre {
+  background: var(--well);
+}
+.text-scroll {
+  background: var(--panel);
+}
+.text .preview-content {
+  color-scheme: inherit;
+}
