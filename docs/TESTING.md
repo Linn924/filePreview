@@ -16,6 +16,8 @@ fixtures 命令在 `work/fixtures/` 生成样例，并下载公开 DOC/PPT/PPTX 
 
 ## 集中执行与选择
 
+仅修改缩放输入提交时，可运行 `npm test -- --suite zoom`。该套件在真实文本预览窗口依次触发 input → Enter / blur，检查输入值和实际文字字号同时变化；覆盖回车、失焦、连续提交、25–400 边界、空值回退和小数取整。不能只设置 value 后触发 change，否则会漏掉数字输入的类型转换问题。修改格式渲染或缩放计算时仍按下方影响矩阵测试。
+
 ```powershell
 npm test -- --suite core
 npm test -- --suite ppt,pdf

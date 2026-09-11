@@ -10,9 +10,11 @@ watch(
 );
 function apply() {
   const number = Number(draft.value);
-  if (Number.isFinite(number) && draft.value.trim())
-    emit("update:modelValue", clampZoom(number));
-  draft.value = String(props.modelValue);
+  const value = Number.isFinite(number) && draft.value.trim()
+    ? clampZoom(number)
+    : props.modelValue;
+  draft.value = String(value);
+  emit("update:modelValue", value);
 }
 </script>
 <template>
@@ -24,14 +26,16 @@ function apply() {
       −</button
     ><label
       ><input
-        v-model="draft"
+        :value="draft"
+        @input="draft = ($event.target as HTMLInputElement).value"
         inputmode="decimal"
         type="number"
         min="25"
         max="400"
         aria-label="缩放比例"
         @change="apply"
-        @keydown.enter="apply"
+        @blur="apply"
+        @keydown.enter.prevent="apply"
       />%</label
     ><button
       aria-label="放大"

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import type { TestContext, Suite } from "./context";
 import core from "./suites/core";
+import zoom from "./suites/zoom";
 import word from "../src/modules/word/tests/e2e";
 import excel from "../src/modules/excel/tests/e2e";
 import ppt from "../src/modules/ppt/tests/e2e";
@@ -26,6 +27,7 @@ const program =
 const results: string[] = [];
 const suites: Record<string, Suite> = {
   core,
+  zoom,
   word,
   excel,
   ppt,
