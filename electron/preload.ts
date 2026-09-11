@@ -1,6 +1,18 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge, Settings } from "../shared/contracts";
 const bridge: DesktopBridge = {
+  printers: () => ipcRenderer.invoke("print:printers"),
+  selectPrintPdfs: () => ipcRenderer.invoke("print:select"),
+  printPdf: (job) => ipcRenderer.invoke("print:submit", job),
+  consumePrint: () => ipcRenderer.invoke("print:consume"),
+  printReady: (error) => ipcRenderer.invoke("print:ready", error),
+  setFullscreen: (value) => ipcRenderer.invoke("window:fullscreen", value),
+  onFullscreen: (handler) => {
+    const listener = (_e: Electron.IpcRendererEvent, value: boolean) =>
+      handler(value);
+    ipcRenderer.on("window:fullscreen", listener);
+    return () => ipcRenderer.removeListener("window:fullscreen", listener);
+  },
   claim: (id) => ipcRenderer.invoke("tabs:claim", id),
   accept: (id) => ipcRenderer.invoke("tabs:accept", id),
   release: (id) => ipcRenderer.send("tabs:release", id),

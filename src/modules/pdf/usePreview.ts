@@ -1,3 +1,4 @@
+import { fitScale } from "../../composables/fit";
 import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import {
   getDocument,
@@ -33,17 +34,24 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     wasmUrl: base + "wasm/",
     useSystemFonts: true,
   });
-  const scale = (width: number) =>
-    (Math.min(
-      Math.max(200, (scroll.value?.clientWidth || 850) - 60) / width,
-      1.5,
+  const scale = (width: number, height: number) =>
+    (fitScale(
+      width,
+      height,
+      (scroll.value?.clientWidth || 850) - 60,
+      (scroll.value?.clientHeight || 700) - 48,
+      props.fitMode || "original",
+      Math.min(
+        Math.max(200, (scroll.value?.clientWidth || 850) - 60) / width,
+        1.5,
+      ),
     ) *
       props.zoom) /
     100;
   function dimensions(index: number) {
     void layout.value;
     const p = pages.value[index],
-      s = scale(p.width);
+      s = scale(p.width, p.height);
     return { width: p.width * s + "px", height: p.height * s + "px" };
   }
   function render(index: number) {
@@ -59,7 +67,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         const original = page.getViewport({ scale: 1 });
         const ratio = Math.min(devicePixelRatio, 2);
         const viewport = page.getViewport({
-          scale: scale(original.width) * ratio,
+          scale: scale(original.width, original.height) * ratio,
         });
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
@@ -133,6 +141,15 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   watch(
     () => props.zoom,
     () => void refresh(),
+  );
+  watch(
+    () => props.fitMode,
+    async () => {
+      const page = current.value;
+      await refresh();
+      await nextTick();
+      jump(page);
+    },
   );
   onBeforeUnmount(() => {
     disposed = true;

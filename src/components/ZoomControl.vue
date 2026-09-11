@@ -10,9 +10,10 @@ watch(
 );
 function apply() {
   const number = Number(draft.value);
-  const value = Number.isFinite(number) && draft.value.trim()
-    ? clampZoom(number)
-    : props.modelValue;
+  const value =
+    Number.isFinite(number) && draft.value.trim()
+      ? clampZoom(number)
+      : props.modelValue;
   draft.value = String(value);
   emit("update:modelValue", value);
 }

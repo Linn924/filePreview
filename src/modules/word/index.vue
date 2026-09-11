@@ -14,7 +14,7 @@ const { pane, host, warning, page, pageCount, jump } = usePreview(props, emit);
   <section ref="pane" class="document-pane">
     <div v-if="warning" class="notice">{{ warning }}</div>
     <div class="document-scroll">
-      <div ref="host" class="word-host" :style="{ zoom: zoom / 100 }"></div>
+      <div ref="host" class="word-host"></div>
     </div>
     <PageNavigation
       :current="page"

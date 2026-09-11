@@ -1,3 +1,4 @@
+import { fitScale } from "../../composables/fit";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import DOMPurify from "dompurify";
 import type { PreviewProps, PreviewEmit } from "../types";
@@ -26,14 +27,18 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const natural = ref({ width: 0, height: 0 });
   const available = ref({ width: 0, height: 0 });
   let observer: ResizeObserver | undefined;
+  let frame=0;
   onMounted(() => {
     const surface = pane.value?.querySelector(".image");
     if (!surface) return;
     observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame=requestAnimationFrame(()=>{
       available.value = {
         width: surface.clientWidth - 50,
         height: surface.clientHeight - 50,
       };
+      });
     });
     observer.observe(surface);
   });
@@ -47,10 +52,17 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     const { width, height } = natural.value;
     const fit =
       width && height
-        ? Math.min(
-            1,
-            Math.max(1, available.value.width) / width,
-            Math.max(1, available.value.height) / height,
+        ? fitScale(
+            width,
+            height,
+            available.value.width,
+            available.value.height,
+            props.fitMode || "original",
+            Math.min(
+              1,
+              Math.max(1, available.value.width) / width,
+              Math.max(1, available.value.height) / height,
+            ),
           )
         : 1;
     return {
@@ -62,6 +74,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   });
   onBeforeUnmount(() => {
     observer?.disconnect();
+    cancelAnimationFrame(frame);
     URL.revokeObjectURL(url);
   });
 

@@ -5,7 +5,18 @@ import electron from "electron";
 const args = process.argv.slice(2);
 const index = args.indexOf("--suite");
 const selected = (index < 0 ? "all" : args[index + 1] || "").split(",");
-const names = ["core", "word", "excel", "ppt", "pdf", "text", "image", "zoom"];
+const names = [
+  "core",
+  "word",
+  "excel",
+  "ppt",
+  "pdf",
+  "text",
+  "image",
+  "zoom",
+  "immersive",
+  "printing",
+];
 if (selected.some((s) => s !== "all" && !names.includes(s)))
   throw new Error("未知套件。支持：" + names.join(",") + " 或 all");
 const run = (command: string, params: string[], shell = false) => {

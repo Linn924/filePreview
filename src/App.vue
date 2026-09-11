@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, shallowRef, nextTick } from "vue";
+import { useImmersive } from "./composables/useImmersive";
 import PreviewTab from "./components/PreviewTab.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { defaults, type Settings, type PreviewFile } from "../shared/contracts";
 const isPreview = new URLSearchParams(location.search).has("preview");
+const immersive = useImmersive(isPreview);
 const files = shallowRef<PreviewFile[]>([]);
 const active = ref("");
 const settings = ref<Settings>({ ...defaults });
@@ -215,6 +217,7 @@ onBeforeUnmount(() => {
         :key="file.id"
         :file="file"
         :initial-zoom="settings.defaultZoom"
+        :immersive="immersive"
     /></template>
     <div v-if="error" class="action-error" role="alert">
       {{ error }}<button @click="error = ''">关闭</button>

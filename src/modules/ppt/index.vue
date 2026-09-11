@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { fitScale } from "../../composables/fit";
 import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import type { PreviewProps } from "../types";
 import { openSlides, type SlidesRenderer } from "./renderer";
@@ -25,15 +26,20 @@ const { current, sync, jump } = useContinuousPages(
 );
 function fit() {
   if (!renderer || !viewport.value?.clientWidth) return;
-  const scale = Math.max(
-    0.05,
-    (Math.min(
-      (viewport.value.clientWidth - 48) / renderer.width,
-      (viewport.value.clientHeight - 48) / renderer.height,
+  const scale =
+    (fitScale(
+      renderer.width,
+      renderer.height,
+      viewport.value.clientWidth - 48,
+      viewport.value.clientHeight - 48,
+      props.fitMode || "original",
+      Math.min(
+        (viewport.value.clientWidth - 48) / renderer.width,
+        (viewport.value.clientHeight - 48) / renderer.height,
+      ),
     ) *
       props.zoom) /
-      100,
-  );
+    100;
   for (const el of pageElements) {
     el.style.width = renderer.width * scale + "px";
     el.style.height = renderer.height * scale + "px";
@@ -82,6 +88,15 @@ onMounted(async () => {
   }
 });
 watch(() => props.zoom, fit);
+watch(
+  () => props.fitMode,
+  async () => {
+    const page = current.value;
+    fit();
+    await nextTick();
+    jump(page);
+  },
+);
 onBeforeUnmount(() => {
   disposed = true;
   observer?.disconnect();

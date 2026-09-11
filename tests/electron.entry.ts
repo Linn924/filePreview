@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import type { TestContext, Suite } from "./context";
+import immersive from "./suites/immersive";
+import printing from "../src/modules/pdf/tests/printing";
 import core from "./suites/core";
 import zoom from "./suites/zoom";
 import word from "../src/modules/word/tests/e2e";
@@ -27,6 +29,8 @@ const program =
 const results: string[] = [];
 const suites: Record<string, Suite> = {
   core,
+  immersive,
+  printing,
   zoom,
   word,
   excel,

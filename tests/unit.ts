@@ -1,4 +1,26 @@
 import assert from "node:assert/strict";
+import {
+  paperSize,
+  selectedPages,
+  printDefaults,
+  validatePrintOptions,
+} from "../shared/printing";
+import { fitScale } from "../src/composables/fit";
+assert.deepEqual(paperSize({ ...printDefaults, paper: "A5" }), {
+  width: 148,
+  height: 210,
+});
+assert.deepEqual(
+  paperSize({ ...printDefaults, paper: "A5", landscape: true }),
+  { width: 210, height: 148 },
+);
+assert.deepEqual(selectedPages("1-3,2,5", 5), [1, 2, 3, 5]);
+assert.throws(() => selectedPages("6", 5));
+assert.throws(() =>
+  validatePrintOptions({ ...printDefaults, deviceName: "printer", copies: 0 }),
+);
+assert.equal(fitScale(100, 200, 400, 400, "width"), 4);
+assert.equal(fitScale(100, 200, 400, 400, "page"), 2);
 import { defaults, normalizeSettings, extensions } from "../shared/contracts";
 import { readFileSync } from "node:fs";
 import { clampZoom } from "../src/composables/zoom";

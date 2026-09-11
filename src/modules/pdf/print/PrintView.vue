@@ -1,0 +1,75 @@
+<script setup lang="ts">
+import { onMounted, onBeforeUnmount, ref } from "vue";
+import { getDocument, GlobalWorkerOptions, type RenderTask } from "pdfjs-dist";
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { paperSize, selectedPages } from "../../../../shared/printing";
+const host = ref<HTMLElement>();
+let disposed = false;
+let task: RenderTask | undefined;
+let loading: ReturnType<typeof getDocument> | undefined;
+onMounted(async () => {
+  try {
+    const job = await window.localPreview.consumePrint();
+    GlobalWorkerOptions.workerSrc = workerUrl;
+    const base = new URL("./pdf-assets/", location.href).href;
+    loading = getDocument({
+      data: job.file.bytes.slice(),
+      cMapUrl: base + "cmaps/",
+      cMapPacked: true,
+      standardFontDataUrl: base + "standard_fonts/",
+      wasmUrl: base + "wasm/",
+      useSystemFonts: true,
+    });
+    const pdf = await loading.promise;
+    const selected = selectedPages(job.options.range, pdf.numPages);
+    const paper = paperSize(job.options);
+    const style = document.createElement("style");
+    style.textContent = `@page{size:${paper.width}mm ${paper.height}mm;margin:0}html,body,#app{margin:0;padding:0;background:white;color:black;color-scheme:light}.print-sheet{box-sizing:border-box;width:${paper.width}mm;height:${paper.height}mm;padding:10mm;break-after:page;display:flex;align-items:center;justify-content:center;overflow:hidden}.print-sheet:last-child{break-after:auto}.print-sheet canvas{max-width:100%;max-height:100%;object-fit:contain}`;
+    host.value!.append(style);
+    let pixels = 0;
+    for (const index of selected) {
+      if (disposed) return;
+      const page = await pdf.getPage(index);
+      const original = page.getViewport({ scale: 1 });
+      const fit = Math.min(
+        ((paper.width - 20) * 72) / 25.4 / original.width,
+        ((paper.height - 20) * 72) / 25.4 / original.height,
+      );
+      const viewport = page.getViewport({ scale: (fit * 150) / 72 });
+      pixels += Math.ceil(viewport.width) * Math.ceil(viewport.height);
+      if (pixels > 60000000)
+        throw Error("本次打印页数较多，请填写页码范围分批打印。");
+      const section = document.createElement("section");
+      section.className = "print-sheet";
+      section.dataset.sourcePage = String(index);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      canvas.style.width = (original.width * fit * 25.4) / 72 + "mm";
+      canvas.style.height = (original.height * fit * 25.4) / 72 + "mm";
+      section.append(canvas);
+      host.value!.append(section);
+      task = page.render({ canvas, viewport });
+      await task.promise;
+      page.cleanup();
+    }
+    await document.fonts.ready;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    if (!disposed) await window.localPreview.printReady();
+  } catch (e) {
+    if (!disposed)
+      await window.localPreview.printReady(
+        e instanceof Error ? e.message : String(e),
+      );
+  }
+});
+onBeforeUnmount(() => {
+  disposed = true;
+  task?.cancel();
+  void loading?.destroy();
+  host.value?.replaceChildren();
+});
+</script>
+<template><div ref="host" class="pdf-print-document"></div></template>

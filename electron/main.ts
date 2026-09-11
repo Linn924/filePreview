@@ -1,3 +1,5 @@
+import { setupPrinting } from "./printing";
+import { setupFullscreen, trackFullscreen } from "./fullscreen";
 import { registerFiles, releaseWindow, setupTransfers } from "./transfers";
 import {
   app,
@@ -143,6 +145,7 @@ function createWindow(preview: boolean) {
   });
   const id = win.webContents.id;
   protectWindow(win);
+  if (preview) trackFullscreen(win);
   win.once("ready-to-show", () => {
     if (!win.isDestroyed()) {
       if (preview && settings.get().maximizePreview) win.maximize();
@@ -239,7 +242,9 @@ export const ready = owner
       );
       Menu.setApplicationMenu(null);
       setupTransfers();
+      setupFullscreen();
       local = await createLocalSession(path.resolve(__dirname, "../dist"));
+      setupPrinting(local);
       ipcMain.handle("preview:select", async (event) => {
         trusted(event);
         const win = BrowserWindow.fromWebContents(event.sender);

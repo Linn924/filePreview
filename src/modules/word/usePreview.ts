@@ -1,4 +1,5 @@
-import { onMounted, onBeforeUnmount, ref } from "vue";
+import { fitScale } from "../../composables/fit";
+import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import { attachTableResize } from "../../composables/resizeTable";
 import type { PreviewFile } from "../../types";
 import type { PreviewProps, PreviewEmit } from "../types";
@@ -11,6 +12,35 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const page = ref(1),
     pageCount = ref(1);
   let pages: HTMLElement[] = [];
+  let resize: ResizeObserver | undefined;
+  function fit() {
+    if (!host.value || !scroller || !pages[0]) return;
+    host.value.style.zoom = "1";
+    const first = pages[0];
+    const width = first.getBoundingClientRect().width,
+      height = first.getBoundingClientRect().height;
+    host.value.style.zoom = String(
+      (fitScale(
+        width,
+        height,
+        scroller.clientWidth - 48,
+        scroller.clientHeight - 48,
+        props.fitMode || "original",
+      ) *
+        props.zoom) /
+        100,
+    );
+  }
+  watch(() => props.zoom, fit);
+  watch(
+    () => props.fitMode,
+    async () => {
+      const number = page.value;
+      fit();
+      await nextTick();
+      jump(number);
+    },
+  );
   let scroller: HTMLElement | undefined;
   function syncPage() {
     if (!scroller) return;
@@ -83,6 +113,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         scroller = pane.value?.querySelector(".document-scroll") as HTMLElement;
         scroller?.addEventListener("scroll", syncPage, { passive: true });
         cleanupResize = attachTableResize(shadow);
+        resize = new ResizeObserver(fit);
+        resize.observe(scroller);
+        fit();
         emit("ready");
       }
     } catch (e) {
@@ -96,6 +129,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   });
   onBeforeUnmount(() => {
     destroyed = true;
+    resize?.disconnect();
     cleanupResize?.();
     scroller?.removeEventListener("scroll", syncPage);
     host.value?.shadowRoot?.replaceChildren();

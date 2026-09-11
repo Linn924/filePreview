@@ -72,6 +72,13 @@ export function normalizeSettings(
   };
 }
 export interface DesktopBridge {
+  printers(): Promise<import("./printing").Printer[]>;
+  selectPrintPdfs(): Promise<PreviewFile[]>;
+  printPdf(job: import("./printing").PdfPrintJob): Promise<string>;
+  consumePrint(): Promise<import("./printing").PdfPrintJob>;
+  printReady(error?: string): Promise<void>;
+  setFullscreen(value: boolean): Promise<boolean>;
+  onFullscreen(handler: (value: boolean) => void): () => void;
   claim(id: string): Promise<PreviewFile>;
   accept(id: string): Promise<void>;
   release(id: string): void;

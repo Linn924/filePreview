@@ -4,10 +4,13 @@ export interface PreviewModule {
   id: string;
   extensions: string[];
   component: Component;
+  pageFit?: boolean;
+  toolbar?: Component;
 }
 export interface PreviewProps {
   file: PreviewFile;
   zoom: number;
+  fitMode?: import("../composables/fit").FitMode;
 }
 export interface PreviewEmit {
   (event: "ready"): void;

@@ -37,3 +37,89 @@
   width: 100%;
   height: 100%;
 }
+
+.pdf-print-panel {
+  width: min(720px, 94vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 20px 24px;
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px #0005;
+}
+.pdf-print-panel header {
+  height: auto;
+  padding: 0 0 12px;
+  background: transparent;
+  justify-content: space-between;
+}
+.pdf-print-panel h2 {
+  font-size: 21px;
+  margin: 0;
+}
+.pdf-print-panel p {
+  font-size: 13px;
+  color: var(--muted);
+}
+.print-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+.print-options label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+.print-options input {
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+.print-range {
+  grid-column: 1/-1;
+}
+.print-options small,
+.print-files small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.print-files {
+  padding-left: 22px;
+  max-height: 200px;
+  overflow: auto;
+}
+.print-files li {
+  padding: 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.print-files li > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.print-files small {
+  display: block;
+}
+.print-files button {
+  padding: 5px 8px;
+}
+.pdf-print-panel footer {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 16px;
+}
+.pdf-print-panel .print-note {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.pdf-print-backdrop {
+  z-index: 100;
+}

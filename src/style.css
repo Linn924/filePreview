@@ -620,3 +620,64 @@ button:hover {
 .tabs {
   min-height: 42px;
 }
+
+/* Fullscreen keeps the content mounted; controls reveal at screen edges. */
+.immersive .app-header,
+.immersive .tabs {
+  display: none;
+}
+.immersive .filebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  opacity: 0;
+  transform: translateY(calc(-100% + 12px));
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+}
+.immersive .filebar:hover,
+.immersive .filebar:focus-within {
+  opacity: 1;
+  transform: none;
+}
+.immersive .page-nav,
+.immersive .pane-footer,
+.immersive .sheet-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  opacity: 0;
+  transform: translateY(calc(100% - 12px));
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+}
+.immersive .page-nav:hover,
+.immersive .page-nav:focus-within,
+.immersive .pane-footer:hover,
+.immersive .sheet-footer:hover {
+  opacity: 1;
+  transform: none;
+}
+.immersive .text,
+.immersive .excel {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.immersive .text-tools,
+.immersive .sheets {
+  opacity: 0.85;
+}
+.immersive-toggle {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.filebar select {
+  max-width: 130px;
+}

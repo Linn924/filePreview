@@ -99,6 +99,14 @@ try {
     "Packaged PDF render",
   );
   results.push("PASS command-line PDF file opened in packaged app");
+  await evaluate(view,"document.querySelector('.pdf-print-button').click()");
+  await waitFor(()=>evaluate(view,"[...document.querySelector('[aria-label=打印纸张]').options].some(option=>option.value==='A5')"),'Packaged PDF print panel');
+  await evaluate(view,"document.querySelector('[aria-label=关闭打印]').click()");
+  await evaluate(view,"window.localPreview.setFullscreen(true)");
+  await waitFor(()=>evaluate(view,"document.documentElement.classList.contains('immersive')"),'Packaged fullscreen');
+  await evaluate(view,"window.localPreview.setFullscreen(false)");
+  await waitFor(()=>evaluate(view,"!document.documentElement.classList.contains('immersive')"),'Packaged exit fullscreen');
+  results.push('PASS packaged fullscreen and PDF A5 print panel (no print job submitted)');
   const before = new Set((await targets()).map((t) => t.id));
   const second = spawn(
     exe,

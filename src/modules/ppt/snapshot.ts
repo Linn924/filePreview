@@ -4,9 +4,9 @@ export function snapshotSlide(stage: HTMLElement, index: number) {
   for (const child of Array.from(stage.childNodes))
     copy.append(child.cloneNode(true));
   // Text boxes are static slide content, not independent scroll containers.
-  copy.querySelectorAll<HTMLElement>('*').forEach(el=>{
-    for(const key of ['overflow','overflowX','overflowY'] as const)
-      if(['auto','scroll'].includes(el.style[key]))el.style[key]='hidden';
+  copy.querySelectorAll<HTMLElement>("*").forEach((el) => {
+    for (const key of ["overflow", "overflowX", "overflowY"] as const)
+      if (["auto", "scroll"].includes(el.style[key])) el.style[key] = "hidden";
   });
   const original = stage.querySelectorAll("canvas");
   copy.querySelectorAll("canvas").forEach((canvas, k) => {
