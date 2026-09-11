@@ -1,156 +1,140 @@
 <script setup lang="ts">
-import { printError } from "./errorMessage";
-import { onMounted, ref, toRaw } from "vue";
+import { onMounted, onBeforeUnmount, ref, watch, toRaw } from "vue";
 import type { PreviewFile } from "../../../../shared/contracts";
-import {
-  printDefaults,
-  type Printer,
-  type PdfPrintOptions,
-} from "../../../../shared/printing";
-const props = defineProps<{ file: PreviewFile }>();
-const emit = defineEmits<{ close: [] }>();
+import type { Printer } from "../../../../shared/printing";
+import PageDimensions from "./PageDimensions.vue";
+import PrintOptions from "./PrintOptions.vue";
+import { usePrintQueue } from "./usePrintQueue";
+import { printError } from "./errorMessage";
+
+const {
+  files,
+  deviceName,
+  busy,
+  stop,
+  selectedCount,
+  add,
+  applyAll,
+  move,
+  start,
+} = usePrintQueue();
+let incomingCleanup: (() => void) | undefined;
+let themeCleanup: (() => void) | undefined;
+const pending: PreviewFile[] = [];
+async function receive() {
+  const incoming = await window.localPreview.printPanelFiles();
+  if (busy.value) pending.push(...incoming);
+  else add(incoming);
+}
+watch(busy, (value) => {
+  window.localPreview.printPanelBusy(value);
+  if (!value && pending.length) add(pending.splice(0));
+});
+async function preview(file: PreviewFile) {
+  try {
+    await window.localPreview.previewPrintFile(toRaw(file));
+  } catch (e) {
+    error.value = printError(e);
+  }
+}
+function arrange() {
+  void window.localPreview.arrangePrintWindows();
+}
+onBeforeUnmount(() => {
+  incomingCleanup?.();
+  themeCleanup?.();
+});
+async function dropFiles(event: DragEvent) {
+  if (busy.value) return;
+  try {
+    if (event.dataTransfer?.files.length)
+      add(
+        await window.localPreview.dropPrintPdfs(
+          Array.from(event.dataTransfer.files),
+        ),
+      );
+    error.value = "";
+  } catch (e) {
+    error.value = printError(e);
+  }
+}
 const printers = ref<Printer[]>([]),
-  options = ref<PdfPrintOptions>({ ...printDefaults }),
-  error = ref(""),
-  busy = ref(false),
-  stop = ref(false);
-const files = ref<Array<{ file: PreviewFile; status: string }>>([
-  { file: props.file, status: "等待" },
-]);
+  error = ref("");
 onMounted(async () => {
+  document.title = "PDF 打印设置";
+  incomingCleanup = window.localPreview.onPrintIncoming(() => void receive());
+  await receive();
+  const apply = (s: import("../../../../shared/contracts").Settings) => {
+    document.documentElement.dataset.theme =
+      s.theme === "system"
+        ? matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : s.theme;
+  };
+  apply(await window.localPreview.getSettings());
+  themeCleanup = window.localPreview.onSettings(apply);
   try {
     printers.value = await window.localPreview.printers();
-    options.value.deviceName =
-      (printers.value.find((p) => p.isDefault) || printers.value[0])?.name ||
-      "";
+    deviceName.value = printers.value[0]?.name || "";
   } catch (e) {
     error.value = printError(e);
   }
 });
-async function add() {
+async function choose() {
   try {
-    const extra = await window.localPreview.selectPrintPdfs();
-    if (files.value.length + extra.length > 12)
-      throw Error("一批最多 12 个 PDF。");
-    files.value.push(
-      ...extra.map((file) => ({ file, status: file.error || "等待" })),
-    );
+    add(await window.localPreview.selectPrintPdfs());
+    error.value = "";
   } catch (e) {
     error.value = printError(e);
   }
 }
-function move(index: number, offset: number) {
-  const next = index + offset;
-  if (next < 0 || next >= files.value.length) return;
-  const list = files.value;
-  [list[index], list[next]] = [list[next], list[index]];
-}
-async function start() {
-  busy.value = true;
-  stop.value = false;
-  error.value = "";
-  for (const row of files.value) row.status = "等待";
-  try {
-    for (const row of files.value) {
-      if (stop.value) {
-        row.status = "未提交";
-        continue;
-      }
-      if (row.file.error) {
-        row.status = "失败：" + row.file.error;
-        continue;
-      }
-      row.status = "正在准备并提交";
-      try {
-        await window.localPreview.printPdf({
-          file: toRaw(row.file),
-          options: { ...toRaw(options.value) },
-        });
-        row.status = "已提交到打印队列";
-      } catch (e) {
-        row.status = "失败：" + printError(e);
-      }
-    }
-  } finally {
-    busy.value = false;
-  }
-}
 </script>
 <template>
-  <Teleport to="body"
-    ><div class="modal-backdrop pdf-print-backdrop">
-      <section class="pdf-print-panel" role="dialog" aria-label="PDF 打印">
-        <header>
-          <h2>PDF 打印</h2>
-          <button :disabled="busy" aria-label="关闭打印" @click="emit('close')">
-            ×
-          </button>
-        </header>
-        <p>选择纸张和方向后，页面会保持比例缩放到纸张内。</p>
-        <div class="print-options">
-          <label
-            >打印机<select v-model="options.deviceName" :disabled="busy">
-              <option
-                v-for="printer in printers"
-                :key="printer.name"
-                :value="printer.name"
-              >
-                {{ printer.displayName }}
-              </option>
-            </select></label
-          ><label
-            >纸张<select
-              v-model="options.paper"
-              aria-label="打印纸张"
-              :disabled="busy"
-            >
-              <option
-                v-for="size in ['A3', 'A4', 'A5', 'A6', 'Letter', 'Legal']"
-                :key="size"
-              >
-                {{ size }}
-              </option>
-            </select></label
-          ><label
-            >方向<select v-model="options.landscape" :disabled="busy">
-              <option :value="false">纵向</option>
-              <option :value="true">横向</option>
-            </select></label
-          ><label
-            >份数<input
-              v-model.number="options.copies"
-              type="number"
-              min="1"
-              max="99"
-              :disabled="busy" /></label
-          ><label
-            >单双面<select v-model="options.duplex" :disabled="busy">
-              <option value="simplex">单面</option>
-              <option value="longEdge">双面（长边翻转）</option>
-              <option value="shortEdge">双面（短边翻转）</option>
-            </select></label
-          ><label
-            >颜色<select v-model="options.color" :disabled="busy">
-              <option :value="true">彩色</option>
-              <option :value="false">黑白</option>
-            </select></label
-          ><label class="print-range"
-            >页码范围<input
-              v-model="options.range"
-              placeholder="留空打印全部，例如 1-3,5"
-              :disabled="busy"
-            /><small
-              >分别应用于每个 PDF；超出页数的文件会显示失败。</small
-            ></label
+  <div class="print-workspace">
+    <section
+      @dragover.prevent
+      @drop.prevent.stop="dropFiles"
+      class="pdf-print-panel"
+      role="dialog"
+      aria-label="PDF 打印"
+    >
+      <header>
+        <h2>PDF 批量打印</h2>
+        <button @click="arrange">并排查看</button>
+      </header>
+      <label class="batch-printer"
+        >打印机<select v-model="deviceName" :disabled="busy">
+          <option
+            v-for="printer in printers"
+            :key="printer.name"
+            :value="printer.name"
           >
-        </div>
-        <p v-if="!printers.length">
-          未找到打印机，请先在 Windows 中配置打印机。
-        </p>
-        <ol class="print-files">
-          <li v-for="(row, index) in files" :key="row.file.id">
-            <span :title="row.file.name"
-              >{{ row.file.name }}<small>{{ row.status }}</small></span
+            {{ printer.displayName }}
+          </option>
+        </select></label
+      >
+      <p>拖入 PDF 或点击“添加 PDF”；在每个文件下设置参数并勾选打印。</p>
+      <p v-if="!printers.length">未找到打印机，请先在 Windows 中配置打印机。</p>
+      <ol class="print-files">
+        <li
+          v-for="(row, index) in files"
+          :key="row.file.id"
+          class="print-file-card"
+        >
+          <div class="print-file-heading">
+            <input
+              type="checkbox"
+              class="print-selected"
+              v-model="row.selected"
+              :disabled="busy"
+              :aria-label="'打印 ' + row.file.name"
+            /><button
+              class="preview-print-file"
+              :title="row.file.name"
+              @click="preview(row.file)"
+            >
+              {{ row.file.name }}</button
             ><button :disabled="busy || index === 0" @click="move(index, -1)">
               ↑</button
             ><button
@@ -161,26 +145,56 @@ async function start() {
             ><button :disabled="busy" @click="files.splice(index, 1)">
               移除
             </button>
-          </li>
-        </ol>
-        <p v-if="error" role="alert">{{ error }}</p>
-        <p class="print-note">
-          “已提交”表示交给系统打印队列，不代表纸张已打印完成。停止后续任务不会取消已提交的任务。
-        </p>
-        <footer>
-          <button :disabled="busy" @click="add">添加 PDF</button
-          ><button v-if="busy" @click="stop = true" :disabled="stop">
-            {{ stop ? "将在当前任务后停止" : "停止后续任务" }}</button
-          ><button
-            v-else
-            class="primary"
-            :disabled="!files.length || !options.deviceName"
-            @click="start"
-          >
-            开始打印（{{ files.length }} 个文件）
-          </button>
-        </footer>
-      </section>
-    </div></Teleport
-  >
+          </div>
+          <div class="print-file-summary">
+            {{ row.options.paper }} ·
+            {{ row.options.landscape ? "横向" : "纵向" }} ·
+            {{ row.options.copies }} 份 · {{ row.options.range || "全部页"
+            }}<button
+              class="toggle-print-options"
+              :aria-expanded="row.expanded"
+              @click="row.expanded = !row.expanded"
+            >
+              {{ row.expanded ? "收起设置" : "展开设置" }}
+            </button>
+          </div>
+          <PageDimensions
+            :file="row.file"
+            :options="row.options"
+          /><PrintOptions
+            v-if="row.expanded"
+            :model-value="row.options"
+            :busy="busy"
+          />
+          <div class="print-file-bottom">
+            <span class="print-status">{{ row.status }}</span
+            ><button
+              class="apply-print-all"
+              :disabled="busy"
+              @click="applyAll(row)"
+            >
+              将此设置应用到全部
+            </button>
+          </div>
+        </li>
+      </ol>
+      <p v-if="error" role="alert">{{ error }}</p>
+      <p class="print-note">
+        按列表顺序使用每个文件自己的设置。“已提交”表示交给系统队列；停止后续任务不会取消已提交的任务。
+      </p>
+      <footer>
+        <button :disabled="busy" @click="choose">添加 PDF</button
+        ><button v-if="busy" @click="stop = true" :disabled="stop">
+          {{ stop ? "将在当前任务后停止" : "停止后续任务" }}</button
+        ><button
+          v-else
+          class="primary"
+          :disabled="!selectedCount || !deviceName"
+          @click="start"
+        >
+          打印所选文件（{{ selectedCount }}）
+        </button>
+      </footer>
+    </section>
+  </div>
 </template>

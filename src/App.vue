@@ -132,6 +132,7 @@ onMounted(async () => {
     applyTheme();
   });
   cleanups.push(window.localPreview.onRemove(closeTab));
+  cleanups.push(window.localPreview.onPreviewPrintFile(file=>{if(!files.value.some(f=>f.id===file.id))files.value=[...files.value,file];active.value=file.id;}));
   cleanups.push(
     window.localPreview.onExport((id) => {
       const file = files.value.find((f) => f.id === id);

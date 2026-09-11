@@ -1,5 +1,11 @@
 # 架构
 
+## 3.3 打印工作区
+
+`electron/printing/window.ts` 管理唯一独立打印设置窗口、待交付文件与原预览联动。列表和逐文件参数由 `usePrintQueue.ts` 持有，`PrintOptions.vue` 展示行内参数，`PageDimensions.vue` 仅在内存读取尺寸。`PrintPanel` 不再通过 Teleport 创建遮罩；真实窗口由系统提供拖动/缩放。
+
+提交时冻结勾选项与各自设置；新增文件不改变正在执行的快照。预览联动经 IPC 向现有窗口交付，已有 ID 只切换标签，关闭的预览由主进程重建。需求汇总见 [PRINTING.md](PRINTING.md)。
+
 ## 沉浸阅读与 PDF 打印
 
 `electron/fullscreen.ts` 管理单个预览窗口的原生全屏；`useImmersive` 同步窗口状态，公共预览容器保存进入前的视图状态。`FitControl` 与 `fitScale` 提供等比适配契约，各格式独立计算页面尺寸；不向 App.vue 添加格式判断。

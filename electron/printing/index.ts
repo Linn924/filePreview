@@ -14,6 +14,7 @@ interface ActiveJob {
 const jobs = new Map<number, ActiveJob>();
 let queue = Promise.resolve();
 export function setupPrinting(local: Session) {
+  ipcMain.handle("print:drop",async(event,paths:unknown)=>{trusted(event);if(!Array.isArray(paths)||paths.some(p=>typeof p!=="string"||!path.isAbsolute(p)||path.extname(p).toLowerCase()!==".pdf"))throw Error("请只拖入 PDF 文件。");const files=[];for(const name of paths)files.push(await readPreviewFile(name));return files;});
   ipcMain.handle("print:printers", async (event) => {
     trusted(event);
     return (await event.sender.getPrintersAsync()).map((p) => ({
@@ -33,8 +34,9 @@ export function setupPrinting(local: Session) {
       },
     );
     if (result.canceled) return [];
-    if (result.filePaths.length > 12) throw Error("一次最多选择 12 个 PDF。");
-    return Promise.all(result.filePaths.map(readPreviewFile));
+    const files=[];
+    for(const path of result.filePaths)files.push(await readPreviewFile(path));
+    return files;
   });
   ipcMain.handle("print:submit", async (event, value: PdfPrintJob) => {
     trusted(event);

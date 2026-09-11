@@ -100,8 +100,11 @@ try {
   );
   results.push("PASS command-line PDF file opened in packaged app");
   await evaluate(view,"document.querySelector('.pdf-print-button').click()");
-  await waitFor(()=>evaluate(view,"[...document.querySelector('[aria-label=打印纸张]').options].some(option=>option.value==='A5')"),'Packaged PDF print panel');
-  await evaluate(view,"document.querySelector('[aria-label=关闭打印]').click()");
+  const panelTarget=await waitFor(async()=>(await targets()).find(t=>t.url.includes("print-panel=1")),"Packaged independent print window");
+  const panel=await connect(panelTarget.webSocketDebuggerUrl);
+  await waitFor(()=>evaluate(panel,"[...document.querySelector('[aria-label=打印纸张]').options].some(option=>option.value==='A5')"),"Packaged PDF print options");
+  await evaluate(panel,"setTimeout(()=>window.localPreview.close(),100);true");
+  await pause(150);
   await evaluate(view,"window.localPreview.setFullscreen(true)");
   await waitFor(()=>evaluate(view,"document.documentElement.classList.contains('immersive')"),'Packaged fullscreen');
   await evaluate(view,"window.localPreview.setFullscreen(false)");

@@ -1,3 +1,4 @@
+import {setupPrintWindow} from "./printing/window";
 import { setupPrinting } from "./printing";
 import { setupFullscreen, trackFullscreen } from "./fullscreen";
 import { registerFiles, releaseWindow, setupTransfers } from "./transfers";
@@ -172,7 +173,6 @@ async function createHome() {
 }
 export async function openPaths(paths: string[], mode?: "tabs" | "windows") {
   if (!paths.length) return [];
-  if (paths.length > 12) throw new Error("一次最多打开 12 个文件。");
   if (!mode) {
     const preference = settings.get().multiFileMode;
     if (paths.length > 1 && preference === "ask") {
@@ -192,8 +192,6 @@ export async function openPaths(paths: string[], mode?: "tabs" | "windows") {
     } else mode = preference === "tabs" ? "tabs" : "windows";
   }
   const groups = mode === "tabs" ? [paths] : paths.map((p) => [p]);
-  if (BrowserWindow.getAllWindows().length + groups.length > 25)
-    throw new Error("打开的窗口较多，请先关闭部分预览。");
   const created: BrowserWindow[] = [];
   for (const group of groups) {
     const files: PreviewFile[] = [];
@@ -245,6 +243,7 @@ export const ready = owner
       setupFullscreen();
       local = await createLocalSession(path.resolve(__dirname, "../dist"));
       setupPrinting(local);
+      setupPrintWindow(local,async files=>{const win=createWindow(true);payloads.set(win.webContents.id,files);await win.loadURL("preview://local/index.html?preview=1");return win;});
       ipcMain.handle("preview:select", async (event) => {
         trusted(event);
         const win = BrowserWindow.fromWebContents(event.sender);
@@ -265,7 +264,6 @@ export const ready = owner
         trusted(event);
         if (
           !Array.isArray(paths) ||
-          paths.length > 12 ||
           paths.some((p) => typeof p !== "string" || !path.isAbsolute(p))
         )
           throw new Error("请选择有效的本机文件。");

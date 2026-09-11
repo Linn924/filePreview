@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { PreviewFile } from "../../../../shared/contracts";
-import PrintPanel from "./PrintPanel.vue";
+import { printError } from "./errorMessage";
 const props = defineProps<{ file: PreviewFile }>();
-const open = ref(false);
-const root = ref<HTMLElement>();
+const error = ref("");
+async function open() {
+  try {
+    await window.localPreview.openPrintPanel(props.file);
+  } catch (e) {
+    error.value = printError(e);
+  }
+}
 </script>
 <template>
-  <span ref="root"
-    ><button class="pdf-print-button" @click="open = true">打印 PDF</button
-    ><PrintPanel v-if="open" :file="props.file" @close="open = false"
-  /></span>
+  <span
+    ><button class="pdf-print-button" @click="open">打印 PDF</button
+    ><span v-if="error" role="alert">{{ error }}</span></span
+  >
 </template>

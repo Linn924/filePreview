@@ -6,6 +6,7 @@ import type { TestContext, Suite } from "./context";
 import immersive from "./suites/immersive";
 import printing from "../src/modules/pdf/tests/printing";
 import core from "./suites/core";
+import bulk from "./suites/bulk";
 import zoom from "./suites/zoom";
 import word from "../src/modules/word/tests/e2e";
 import excel from "../src/modules/excel/tests/e2e";
@@ -29,6 +30,7 @@ const program =
 const results: string[] = [];
 const suites: Record<string, Suite> = {
   core,
+  bulk,
   immersive,
   printing,
   zoom,

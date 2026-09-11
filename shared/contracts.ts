@@ -72,7 +72,15 @@ export function normalizeSettings(
   };
 }
 export interface DesktopBridge {
+  openPrintPanel(file:PreviewFile):Promise<void>;
+  printPanelFiles():Promise<PreviewFile[]>;
+  onPrintIncoming(handler:()=>void):()=>void;
+  previewPrintFile(file:PreviewFile):Promise<void>;
+  onPreviewPrintFile(handler:(file:PreviewFile)=>void):()=>void;
+  arrangePrintWindows():Promise<void>;
+  printPanelBusy(value:boolean):void;
   printers(): Promise<import("./printing").Printer[]>;
+  dropPrintPdfs(files:File[]):Promise<PreviewFile[]>;
   selectPrintPdfs(): Promise<PreviewFile[]>;
   printPdf(job: import("./printing").PdfPrintJob): Promise<string>;
   consumePrint(): Promise<import("./printing").PdfPrintJob>;
