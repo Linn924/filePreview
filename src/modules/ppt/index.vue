@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { previewError } from '../../../shared/previewError';
 import { fitScale } from "../../composables/fit";
 import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import type { PreviewProps } from "../types";
@@ -84,7 +85,7 @@ onMounted(async () => {
     fit();
     emit("ready");
   } catch (e) {
-    if (!disposed) emit("error", "无法解析演示文稿：" + String(e));
+    if (!disposed) emit("error", previewError(e, '演示文稿'));
   }
 });
 watch(() => props.zoom, fit);

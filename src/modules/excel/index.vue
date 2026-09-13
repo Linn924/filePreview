@@ -9,6 +9,7 @@ const emit = defineEmits<{
   "update:zoom": [value: number];
 }>();
 const {
+  warning,
   pane,
   scroll,
   onScroll,
@@ -35,6 +36,7 @@ const {
 </script>
 <template>
   <section ref="pane" class="excel">
+    <div v-if="warning" class="notice" role="status">{{ warning }}</div>
     <nav class="sheets" aria-label="工作表">
       <button
         v-for="name in book?.SheetNames"

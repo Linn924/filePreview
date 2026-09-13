@@ -1,5 +1,6 @@
 import { open } from "node:fs/promises";
 import path from "node:path";
+import { previewError } from '../shared/previewError';
 import { randomUUID } from "node:crypto";
 import { extensions, type PreviewFile } from "../shared/contracts";
 export async function readPreviewFile(filePath: string): Promise<PreviewFile> {
@@ -25,7 +26,7 @@ export async function readPreviewFile(filePath: string): Promise<PreviewFile> {
       throw new Error(`文件超过 ${limit} MB，请选择较小的文件。`);
     file.bytes = new Uint8Array(await handle.readFile());
   } catch (e) {
-    file.error = e instanceof Error ? e.message : "无法读取文件。";
+    file.error = (e as NodeJS.ErrnoException)?.code ? previewError(e, '文件') : e instanceof Error ? e.message : "无法读取文件。";
   } finally {
     await handle?.close();
   }

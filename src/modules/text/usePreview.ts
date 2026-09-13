@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import type { PreviewFile } from "../../types";
@@ -20,6 +20,12 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     encoding.value = "gb18030";
   }
   const raw = computed(() => new TextDecoder(encoding.value).decode(bytes));
+  if (['utf-8', 'gb18030', 'utf-16le', 'utf-16be'].includes(props.file.view?.encoding ?? ''))
+    encoding.value = props.file.view!.encoding!;
+  watch(encoding, value => {
+    props.file.view ??= { zoom: props.zoom, scroll: [] };
+    props.file.view.encoding = value;
+  }, { flush: 'sync' });
   const pretty = computed(() => {
     if (props.file.ext === "json") {
       try {

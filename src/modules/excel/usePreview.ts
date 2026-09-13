@@ -10,18 +10,23 @@ import {
 } from "vue";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
+import { loadWorkbook } from './loadWorkbook';
+import { previewError } from '../../../shared/previewError';
 import type { PreviewFile } from "../../types";
 import type { PreviewProps, PreviewEmit } from "../types";
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const pane = ref<HTMLElement>();
   const book = shallowRef<XLSX.WorkBook>();
   let styled: ExcelJS.Workbook | undefined;
+  const warning = ref('');
+  const restored = props.file.view?.excel;
   const sheetName = ref("");
   const rowPage = ref(0);
   const colPage = ref(0);
   const pageRows = 200,
     pageCols = 100;
-  const widths = ref<Record<string, number>>({});
+  const widths = ref<Record<string, number>>({ ...restored?.widths });
+  let initialized = false;
   function resizeColumn(event: PointerEvent, c: number) {
     event.preventDefault();
     event.stopPropagation();
@@ -58,6 +63,11 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const colCount = computed(() => (range.value ? range.value.e.c + 1 : 0));
   const startRow = computed(() => 0);
   const visibleRows = ref(200);
+  watch([sheetName, colPage, visibleRows, widths], () => {
+    if (!initialized) return;
+    props.file.view ??= { zoom: props.zoom, scroll: [] };
+    props.file.view.excel = { sheet: sheetName.value, columns: colPage.value, rows: visibleRows.value, widths: { ...widths.value } };
+  }, { deep: true, flush: 'sync' });
   const scroll = ref<HTMLElement>();
   function onScroll() {
     const el = scroll.value;
@@ -375,23 +385,21 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   );
   onMounted(async () => {
     try {
-      if (props.file.ext === "xlsx") {
-        styled = new ExcelJS.Workbook();
-        await styled.xlsx.load(props.file.bytes.slice().buffer);
-      }
-      book.value = XLSX.read(props.file.bytes, {
-        type: "array",
-        cellStyles: true,
-        cellText: true,
-        cellHTML: false,
-      });
-      sheetName.value = book.value.SheetNames[0] || "";
+      const loaded = await loadWorkbook(props.file.bytes, props.file.ext);
+      styled = loaded.styled;
+      warning.value = loaded.warning;
+      book.value = loaded.book;
+      sheetName.value = restored && book.value.SheetNames.includes(restored.sheet) ? restored.sheet : book.value.SheetNames[0] || '';
+      await nextTick();
+      colPage.value = Math.max(0, Math.min(restored?.columns ?? 0, Math.ceil(colCount.value / pageCols) - 1));
+      visibleRows.value = Math.min(rowCount.value, Math.max(200, restored?.rows ?? 200));
+      await nextTick();
+      initialized = true;
       emit("ready");
     } catch (e) {
       emit(
         "error",
-        "无法解析表格，文件可能损坏、加密或不兼容。" +
-          (e instanceof Error ? ` ${e.message}` : ""),
+        previewError(e, '表格文件'),
       );
     }
   });
@@ -403,6 +411,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   });
 
   return {
+    warning,
     pane,
     scroll,
     onScroll,

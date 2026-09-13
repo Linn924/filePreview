@@ -35,6 +35,8 @@ if (!args.includes("--skip-build"))
     process.platform === "win32",
   );
 run(process.execPath, ["--import", "tsx", "tests/unit.ts"]);
+if (selected.includes('all') || selected.includes('excel'))
+  run(process.execPath, ['--import', 'tsx', 'tests/excel-fallback.ts']);
 mkdirSync(".test-build", { recursive: true });
 await build({
   entryPoints: ["tests/electron.entry.ts"],

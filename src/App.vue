@@ -147,7 +147,7 @@ onMounted(async () => {
           ".pdf-scroll,.slide-scroll,.document-scroll,.table-wrap,.text-scroll,.image",
         ) || [],
       ).map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
-      window.localPreview.supply({ ...file, view: { zoom, scroll } });
+      window.localPreview.supply({ ...file, view: { ...file.view, zoom, scroll } });
     }),
   );
   if (isPreview) {

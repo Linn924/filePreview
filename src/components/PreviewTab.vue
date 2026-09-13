@@ -14,7 +14,9 @@ const props = defineProps<{
 const module = computed(
   () => getPreviewModule(props.file.ext) as PreviewModule | undefined,
 );
-const fitMode = ref<FitMode>("original");
+props.file.view ??= { zoom: props.initialZoom, scroll: [] };
+const fitMode = ref<FitMode>(props.file.view.fit ?? "original");
+watch(fitMode, value => { props.file.view!.fit = value; }, { flush: 'sync' });
 let saved:
   | { zoom: number; fit: FitMode; scroll: Array<{ top: number; left: number }> }
   | undefined;

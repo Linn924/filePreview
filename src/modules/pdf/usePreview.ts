@@ -1,4 +1,5 @@
 import { fitScale } from "../../composables/fit";
+import { previewError } from '../../../shared/previewError';
 import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import {
   getDocument,
@@ -25,6 +26,21 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   let queue = Promise.resolve();
   const rendered = new Set<number>();
   const tasks = new Set<RenderTask>();
+  // Correct estimated page sizes without moving the page currently being read.
+  async function updateSizes(updates: Array<{ index: number; width: number; height: number }>) {
+    if (disposed) return;
+    updates = updates.filter(p => pages.value[p.index]?.width !== p.width || pages.value[p.index]?.height !== p.height);
+    if (!updates.length) return;
+    const root = scroll.value;
+    sync();
+    const anchor = elements()[current.value - 1];
+    const top = anchor?.getBoundingClientRect().top;
+    const beforeScroll = root?.scrollTop;
+    for (const p of updates) pages.value[p.index] = { width: p.width, height: p.height };
+    await nextTick();
+    if (!disposed && root && anchor && top !== undefined && root.scrollTop === beforeScroll)
+      root.scrollTop += anchor.getBoundingClientRect().top - top;
+  }
   const base = new URL("./pdf-assets/", location.href).href;
   const load = getDocument({
     data: props.file.bytes.slice(),
@@ -65,6 +81,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         const page = await pdf.getPage(index + 1);
         if (disposed || token !== revision) return;
         const original = page.getViewport({ scale: 1 });
+        await updateSizes([{ index, width: original.width, height: original.height }]);
+        if (disposed || token !== revision) return;
         const ratio = Math.min(devicePixelRatio, 2);
         const viewport = page.getViewport({
           scale: scale(original.width, original.height) * ratio,
@@ -119,23 +137,35 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     try {
       pdf = await load.promise;
       if (disposed) return;
-      const sizes = [];
-      for (let n = 1; n <= pdf.numPages; n++) {
-        const p = await pdf.getPage(n);
-        if (disposed) return;
-        const v = p.getViewport({ scale: 1 });
-        sizes.push({ width: v.width, height: v.height });
-      }
-      pages.value = sizes;
+      const first = await pdf.getPage(1);
+      if (disposed) return;
+      const initial = first.getViewport({ scale: 1 });
+      pages.value = Array.from({ length: pdf.numPages }, () => ({ width: initial.width, height: initial.height }));
       await nextTick();
       await render(0);
+      if (disposed) return;
       observe();
       resize = new ResizeObserver(() => void refresh());
       resize.observe(scroll.value!);
       emit("ready");
+      // Yield so the first canvas can paint before remaining page metadata loads.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      let sizes: Array<{ index: number; width: number; height: number }> = [];
+      for (let n = 2; n <= pdf.numPages; n++) {
+        if (disposed) return;
+        const p = await pdf.getPage(n);
+        if (disposed) return;
+        const v = p.getViewport({ scale: 1 });
+        sizes.push({ index: n - 1, width: v.width, height: v.height });
+        if (sizes.length === 16 || n === pdf.numPages) {
+          await updateSizes(sizes);
+          sizes = [];
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+      }
     } catch (e) {
       if (!disposed)
-        emit("error", "无法打开 PDF，文件可能损坏或已加密。" + String(e));
+        emit("error", previewError(e, 'PDF 文件'));
     }
   });
   watch(

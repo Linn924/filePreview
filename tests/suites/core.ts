@@ -115,6 +115,7 @@ const suite: Suite = async (c) => {
     source,
     "document.querySelector('.preview-tab').dataset.fileId",
   );
+  await c.evaluate(source, "(()=>{const s=document.querySelector('.text-tools select');s.value='gb18030';s.dispatchEvent(new Event('change',{bubbles:true}))})()");
   await c.evaluate(
     source,
     "(()=>{const z=document.querySelector('.zoom-control input');z.value='137';z.dispatchEvent(new Event('change',{bubbles:true}))})()",
@@ -136,6 +137,7 @@ const suite: Suite = async (c) => {
   await c.pause(250);
   if (!source.isDestroyed()) throw Error("Empty source window was not closed");
   c.pass("successful transfer releases source window");
+  await c.check(target, 'transfer retains text encoding', `document.querySelector('[data-file-id="${id}"] .text-tools select').value==='gb18030'`);
   await c.evaluate(
     target,
     "(()=>{const data=new DataTransfer();data.setData('application/x-file-preview-tab','missing');document.querySelector('main').dispatchEvent(new DragEvent('drop',{dataTransfer:data,bubbles:true,cancelable:true}))})()",
@@ -146,6 +148,13 @@ const suite: Suite = async (c) => {
     "document.querySelectorAll('.tab').length===2&&!!document.querySelector('.action-error')",
   );
   c.close(target);
+  const fitSource = await c.open('document.pdf');
+  await c.evaluate(fitSource, "(()=>{const s=document.querySelector('[aria-label=页面适配]');s.value='width';s.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  const fitTarget = await c.open('text.txt');
+  const fitId = await c.evaluate<string>(fitSource, "document.querySelector('.preview-tab').dataset.fileId");
+  await c.evaluate(fitTarget, `(()=>{const d=new DataTransfer();d.setData('application/x-file-preview-tab',${JSON.stringify(fitId)});document.querySelector('main').dispatchEvent(new DragEvent('drop',{dataTransfer:d,bubbles:true,cancelable:true}))})()`);
+  await c.check(fitTarget, 'transfer retains page fit mode', `document.querySelector('[data-file-id="${fitId}"] [aria-label=页面适配]')?.value==='width'`);
+  c.close(fitTarget);
   c.program.updateSettings({ closeAction: "ask" });
   dialog.showMessageBox = (async () => {
     prompts++;

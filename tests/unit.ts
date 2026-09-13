@@ -1,4 +1,10 @@
 import assert from "node:assert/strict";
+import { previewError } from '../shared/previewError';
+assert.match(previewError({name:'PasswordException'}, 'PDF'), /密码保护/);
+assert.match(previewError({code:'ENOENT'}, '文件'), /移动或删除/);
+assert.match(previewError({code:'EACCES'}, '文件'), /权限/);
+assert.match(previewError({name:'InvalidPDFException'}, 'PDF'), /损坏/);
+assert.ok(!previewError(new Error('secret-path'), 'Word').includes('secret-path'));
 import {
   paperSize,
   selectedPages,

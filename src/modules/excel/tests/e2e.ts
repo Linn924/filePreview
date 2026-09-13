@@ -1,7 +1,7 @@
 import type { Suite } from "../../../../tests/context";
 import { checkResize } from "../../../../tests/resize";
 const suite: Suite = async (c) => {
-  const win = await c.open("styled.xlsx");
+  let win = await c.open("styled.xlsx");
   await c.check(
     win,
     "Excel merges and styles",
@@ -29,7 +29,20 @@ const suite: Suite = async (c) => {
     "Excel wheel does not zoom",
     "document.querySelector('.zoom-control input').value==='100'",
   );
+  const retainedWidth = await c.evaluate<number>(win, "document.querySelectorAll('thead th')[1].getBoundingClientRect().width");
+  const originalSheet = await c.evaluate<string>(win, "document.querySelector('.sheets button.active').textContent.trim()");
   await c.click(win, ".sheets button", "分页测试");
+  const receiver = await c.open('data.json');
+  const transferId = await c.evaluate<string>(win, "document.querySelector('.preview-tab').dataset.fileId");
+  await c.evaluate(receiver, `(()=>{const d=new DataTransfer();d.setData('application/x-file-preview-tab',${JSON.stringify(transferId)});document.querySelector('main').dispatchEvent(new DragEvent('drop',{dataTransfer:d,bubbles:true,cancelable:true}))})()`);
+  await c.check(receiver, 'Excel transfer restores selected worksheet', "document.querySelector('.sheets button.active')?.textContent.trim()==='分页测试' && !document.querySelector('.loading')");
+  await c.click(receiver, '.sheets button', originalSheet);
+  await c.check(receiver, 'Excel transfer retains temporary column width', `Math.abs(document.querySelectorAll('thead th')[1].getBoundingClientRect().width-${retainedWidth})<2`);
+  c.close(receiver);
+  // Continue the remaining checks in a freshly opened workbook.
+  const reopened = await c.open('styled.xlsx');
+  await c.click(reopened, '.sheets button', '分页测试');
+  win = reopened;
   await c.evaluate(
     win,
     "(()=>{const el=document.querySelector('.table-wrap');el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event('scroll'))})()",

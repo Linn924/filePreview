@@ -5,7 +5,7 @@ export interface PreviewFile {
   ext: string;
   bytes: Uint8Array;
   error: string;
-  view?: { zoom: number; scroll: Array<{ top: number; left: number }> };
+  view?: { zoom: number; scroll: Array<{ top: number; left: number }>; fit?: 'original' | 'width' | 'page'; encoding?: string; excel?: { sheet: string; columns: number; rows: number; widths: Record<string, number> } };
 }
 export type Theme = "light" | "dark" | "system";
 export interface Settings {

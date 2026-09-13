@@ -1,4 +1,5 @@
 import { fitScale } from "../../composables/fit";
+import { previewError } from '../../../shared/previewError';
 import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import { attachTableResize } from "../../composables/resizeTable";
 import type { PreviewFile } from "../../types";
@@ -122,8 +123,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       if (!destroyed)
         emit(
           "error",
-          "无法解析 Word 文件，文件可能损坏、加密或不兼容。" +
-            (e instanceof Error ? ` ${e.message}` : ""),
+          previewError(e, 'Word 文件'),
         );
     }
   });
