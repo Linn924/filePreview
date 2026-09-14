@@ -14,3 +14,4 @@
 5. README 面向使用者，完整列出已实现功能。架构、测试和后续计划分别记录在 docs/ 中。
 6. 不保存预览文件、历史路径或转换产物。只允许保存用户明确选择的应用设置。
 7. 不提交安装包、依赖、截图、临时样例或敏感信息。用户已要求本次代码更新提交到指定 GitHub 仓库。
+8. **每次完成新需求并通过相关测试后**：在本机卸载旧版并重新安装最新安装包。安装目录固定为 `D:\file-preview\File Preview`。步骤：`npm run build:win` → 静默卸载（`D:\file-preview\File Preview\Uninstall File Preview.exe /S`）→ 静默安装（`outputs/release/FilePreview-Setup-<version>-x64.exe /S /D=D:\file-preview\File Preview`）→ 确认 `File Preview.exe` 存在且版本/构建时间更新。不要跳过卸载直接覆盖安装。
