@@ -38,7 +38,7 @@ PDF 的 `index.ts` 通过可选 `toolbar` 注册专属打印入口。`src/module
 
 `scripts/associations.ts` 从共享扩展名列表生成 NSIS 注册，仅添加本软件的 Open With 候选。卸载仅移除本软件的键，不写入扩展名默认值或 UserChoice。
 
-修改前先按 [测试说明](TESTING.md) 选择影响范围；共享层改动运行完整套件。后续功能记录在 [BACKLOG.md](BACKLOG.md)。
+修改前先按 [测试说明](TESTING.md) 选择影响范围；共享层改动运行完整套件。后续功能记录在 [BACKLOG.md](BACKLOG.md)。Electron → Tauri 2 等技术路线评估与门禁见 [TAURI2-MIGRATION-VALIDATION.md](TAURI2-MIGRATION-VALIDATION.md)，未完成硬门槛前不替换主进程栈。
 
 ## 3.1 连续阅读与跨窗口移交
 
