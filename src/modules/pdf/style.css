@@ -38,6 +38,166 @@
   height: 100%;
 }
 
+.pdf-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+.pdf-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.pdf-body .pdf-scroll {
+  flex: 1;
+}
+.pdf-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pdf-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pdf-search-input {
+  width: min(220px, 36vw);
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+.pdf-search-count {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 4.5em;
+}
+.pdf-search-error {
+  font-size: 12px;
+  color: #c0392b;
+}
+.pdf-page.has-hit {
+  box-shadow: 0 0 0 2px #e6a23c55;
+}
+.pdf-page.is-active-hit {
+  box-shadow: 0 0 0 3px #409eff88;
+}
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+.pdf-text-layer.enabled {
+  opacity: 0.01;
+  pointer-events: auto;
+  user-select: text;
+}
+.pdf-text-layer span {
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0 0;
+  color: transparent;
+  cursor: text;
+}
+.pdf-nav {
+  width: 160px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.pdf-nav-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+}
+.pdf-nav-tabs button {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pdf-nav-tabs button.active {
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.pdf-outline,
+.pdf-thumbs {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 6px;
+}
+.pdf-nav-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px;
+}
+.outline-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.outline-item:hover,
+.outline-item.current {
+  background: var(--well);
+}
+.outline-item small {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--well);
+  cursor: pointer;
+}
+.thumb.current {
+  border-color: var(--accent);
+}
+.thumb canvas {
+  background: white;
+  box-shadow: 0 1px 4px #0002;
+  max-width: 100%;
+}
+.thumb span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .pdf-print-panel {
   width: min(720px, 94vw);
   max-height: 92vh;
@@ -129,3 +289,36 @@
 .print-drag-handle{cursor:move;touch-action:none;user-select:none}.print-drag-handle button{cursor:pointer}.pdf-print-panel{box-sizing:border-box}
 
 .print-workspace{height:100vh;background:var(--bg);overflow:hidden}.print-workspace .pdf-print-panel{width:100%;height:100%;max-height:none;border-radius:0;box-shadow:none}.preview-print-file{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left;font-weight:600}.paper-dimensions{font-size:12px!important}.paper-dimensions small{display:block;margin-top:4px}.print-workspace .print-file-heading{flex-wrap:wrap}
+
+.paper-layout-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--well);
+}
+.paper-sheet {
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 8px #0002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.paper-sheet canvas {
+  max-width: 92%;
+  max-height: 92%;
+  object-fit: contain;
+}
+.paper-layout-preview small {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.paper-layout-error {
+  color: #c0392b;
+}

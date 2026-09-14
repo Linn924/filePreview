@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount, ref, watch, toRaw } from "vue";
 import type { PreviewFile } from "../../../../shared/contracts";
 import type { Printer } from "../../../../shared/printing";
 import PageDimensions from "./PageDimensions.vue";
+import PaperPreview from "./PaperPreview.vue";
 import PrintOptions from "./PrintOptions.vue";
 import { usePrintQueue } from "./usePrintQueue";
 import { printError } from "./errorMessage";
@@ -159,6 +160,10 @@ async function choose() {
             </button>
           </div>
           <PageDimensions
+            :file="row.file"
+            :options="row.options"
+          /><PaperPreview
+            class="print-paper-preview"
             :file="row.file"
             :options="row.options"
           /><PrintOptions

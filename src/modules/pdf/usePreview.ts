@@ -1,6 +1,6 @@
 import { fitScale } from "../../composables/fit";
 import { previewError } from '../../../shared/previewError';
-import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
+import { onMounted, onBeforeUnmount, ref, shallowRef, watch, nextTick } from "vue";
 import {
   getDocument,
   GlobalWorkerOptions,
@@ -21,6 +21,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   let pdf: PDFDocumentProxy | undefined,
     observer: IntersectionObserver | undefined,
     resize: ResizeObserver | undefined;
+  const pdfRef = shallowRef<PDFDocumentProxy | undefined>();
   let disposed = false,
     revision = 0;
   let queue = Promise.resolve();
@@ -136,6 +137,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   onMounted(async () => {
     try {
       pdf = await load.promise;
+      pdfRef.value = pdf;
       if (disposed) return;
       const first = await pdf.getPage(1);
       if (disposed) return;
@@ -189,5 +191,13 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     tasks.forEach((t) => t.cancel());
     void load.destroy();
   });
-  return { scroll, pages, current, sync, jump, dimensions };
+  return {
+    scroll,
+    pages,
+    current,
+    sync,
+    jump,
+    dimensions,
+    pdf: pdfRef,
+  };
 }

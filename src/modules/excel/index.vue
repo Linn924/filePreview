@@ -30,6 +30,8 @@ const {
   startCol,
   endCol,
   endRow,
+  padTop,
+  padBottom,
   resizeColumn,
   XLSX,
 } = usePreview(props, emit);
@@ -82,6 +84,14 @@ const {
           </thead>
           <tbody>
             <tr
+              v-if="padTop > 0"
+              class="row-virtual-spacer"
+              aria-hidden="true"
+              :style="{ height: padTop + 'px' }"
+            >
+              <td :colspan="columns.length + 1"></td>
+            </tr>
+            <tr
               v-for="row in rows"
               :key="row.r"
               :data-row="row.r"
@@ -105,6 +115,14 @@ const {
                   ></template
                 ><template v-else>{{ cell.text }}</template>
               </td>
+            </tr>
+            <tr
+              v-if="padBottom > 0"
+              class="row-virtual-spacer"
+              aria-hidden="true"
+              :style="{ height: padBottom + 'px' }"
+            >
+              <td :colspan="columns.length + 1"></td>
             </tr>
           </tbody>
         </table>

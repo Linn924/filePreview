@@ -62,21 +62,61 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const rowCount = computed(() => (range.value ? range.value.e.r + 1 : 0));
   const colCount = computed(() => (range.value ? range.value.e.c + 1 : 0));
   const startRow = computed(() => 0);
-  const visibleRows = ref(200);
-  watch([sheetName, colPage, visibleRows, widths], () => {
+  /** Highest row the user has reached (for progressive jump targets). */
+  const loadedRowCount = ref(200);
+  const VIEWPORT_ROW_BUFFER = 30;
+  const scrollTop = ref(0);
+  const clientHeight = ref(600);
+  const rowOffsets = computed(() => {
+    const heights: number[] = [0];
+    let total = 0;
+    for (let r = 0; r < rowCount.value; r++) {
+      total += rowHeight(r);
+      heights.push(total);
+    }
+    return heights;
+  });
+  const totalTableHeight = computed(
+    () => rowOffsets.value[rowCount.value] || 0,
+  );
+  function rowAtOffset(y: number) {
+    const heights = rowOffsets.value;
+    let lo = 0,
+      hi = rowCount.value;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (heights[mid + 1] <= y) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+  const virtualStart = computed(() =>
+    Math.max(
+      0,
+      rowAtOffset(Math.max(0, scrollTop.value)) - VIEWPORT_ROW_BUFFER,
+    ),
+  );
+  const virtualEnd = computed(() =>
+    Math.min(
+      rowCount.value,
+      rowAtOffset(scrollTop.value + clientHeight.value) + VIEWPORT_ROW_BUFFER,
+    ),
+  );
+  watch([sheetName, colPage, loadedRowCount, widths], () => {
     if (!initialized) return;
     props.file.view ??= { zoom: props.zoom, scroll: [] };
-    props.file.view.excel = { sheet: sheetName.value, columns: colPage.value, rows: visibleRows.value, widths: { ...widths.value } };
+    props.file.view.excel = { sheet: sheetName.value, columns: colPage.value, rows: loadedRowCount.value, widths: { ...widths.value } };
   }, { deep: true, flush: 'sync' });
   const scroll = ref<HTMLElement>();
   function onScroll() {
     const el = scroll.value;
     if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 500)
-      visibleRows.value = Math.min(
-        rowCount.value,
-        visibleRows.value + pageRows,
-      );
+    scrollTop.value = el.scrollTop;
+    clientHeight.value = el.clientHeight;
+    // Keep a generous loaded window so jump-to-page can still land.
+    const lastVisible = rowAtOffset(el.scrollTop + el.clientHeight);
+    if (lastVisible + 200 > loadedRowCount.value)
+      loadedRowCount.value = Math.min(rowCount.value, lastVisible + 400);
     const top = el.getBoundingClientRect().top;
     const rows = Array.from(el.querySelectorAll<HTMLElement>("tbody tr"));
     const first = rows.find((r) => r.getBoundingClientRect().bottom > top + 28);
@@ -87,25 +127,23 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       1,
       Math.min(Math.ceil(rowCount.value / pageRows), Math.floor(value) || 1),
     );
-    visibleRows.value = Math.max(visibleRows.value, page * pageRows);
+    const targetRow = (page - 1) * pageRows;
+    loadedRowCount.value = Math.max(loadedRowCount.value, Math.min(rowCount.value, targetRow + pageRows));
     await nextTick();
-    const row = scroll.value?.querySelector<HTMLElement>(
-      `tr[data-row="${(page - 1) * pageRows}"]`,
-    );
-    if (row && scroll.value)
-      scroll.value.scrollTop +=
-        row.getBoundingClientRect().top -
-        scroll.value.getBoundingClientRect().top -
-        28;
+    const y = rowOffsets.value[targetRow] || 0;
+    if (scroll.value) scroll.value.scrollTop = Math.max(0, y - 28);
+    scrollTop.value = scroll.value?.scrollTop || 0;
+    clientHeight.value = scroll.value?.clientHeight || 600;
     rowPage.value = page - 1;
   }
   watch(sheetName, () => {
-    visibleRows.value = 200;
+    loadedRowCount.value = 200;
     rowPage.value = 0;
+    scrollTop.value = 0;
     if (scroll.value) scroll.value.scrollTop = 0;
   });
   const startCol = computed(() => colPage.value * pageCols);
-  const endRow = computed(() => Math.min(rowCount.value, visibleRows.value));
+  const endRow = computed(() => loadedRowCount.value);
   const endCol = computed(() =>
     Math.min(colCount.value, startCol.value + pageCols),
   );
@@ -253,8 +291,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       { rows: number; cols: number; r: number; c: number } | null
     >();
     for (const m of sheet.value?.["!merges"] || []) {
-      const r0 = Math.max(m.s.r, startRow.value),
-        r1 = Math.min(m.e.r, endRow.value - 1);
+      const r0 = Math.max(m.s.r, virtualStart.value),
+        r1 = Math.min(m.e.r, virtualEnd.value - 1);
       const c0 = Math.max(m.s.c, startCol.value),
         c1 = Math.min(m.e.c, endCol.value - 1);
       const visibleRows = Array.from(
@@ -281,8 +319,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   });
   const rows = computed(() =>
     Array.from(
-      { length: Math.max(0, endRow.value - startRow.value) },
-      (_, i) => startRow.value + i,
+      { length: Math.max(0, virtualEnd.value - virtualStart.value) },
+      (_, i) => virtualStart.value + i,
     )
       .filter((r) => rowHeight(r) > 0)
       .map((r) => ({
@@ -316,6 +354,10 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
           ];
         }),
       })),
+  );
+  const padTop = computed(() => rowOffsets.value[virtualStart.value] || 0);
+  const padBottom = computed(() =>
+    Math.max(0, totalTableHeight.value - (rowOffsets.value[virtualEnd.value] || 0)),
   );
   const imageUrls = new Map<string, string>();
   function offset(from: number, to: number, dimension: (n: number) => number) {
@@ -392,9 +434,10 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       sheetName.value = restored && book.value.SheetNames.includes(restored.sheet) ? restored.sheet : book.value.SheetNames[0] || '';
       await nextTick();
       colPage.value = Math.max(0, Math.min(restored?.columns ?? 0, Math.ceil(colCount.value / pageCols) - 1));
-      visibleRows.value = Math.min(rowCount.value, Math.max(200, restored?.rows ?? 200));
+      loadedRowCount.value = Math.min(rowCount.value, Math.max(200, restored?.rows ?? 200));
       await nextTick();
       initialized = true;
+      onScroll();
       emit("ready");
     } catch (e) {
       emit(
@@ -432,6 +475,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     startCol,
     endCol,
     endRow,
+    padTop,
+    padBottom,
+    virtualStart,
     resizeColumn,
     XLSX,
   };

@@ -49,8 +49,22 @@ const suite: Suite = async (c) => {
   );
   await c.check(
     win,
-    "Excel outside wheel row page",
-    "document.querySelectorAll('tbody tr').length>200&&document.querySelector('tbody th').textContent==='1'",
+    "Excel virtual window keeps DOM bounded after jump to end",
+    "document.querySelectorAll('tbody tr.row-virtual-spacer').length>=1 && document.querySelectorAll('tbody tr:not(.row-virtual-spacer)').length<400 && document.querySelector('tbody tr[data-row]')?.dataset.row!=='0'",
+  );
+  await c.check(
+    win,
+    "Excel virtual scroll still shows later rows",
+    "(()=>{const rows=[...document.querySelectorAll('tbody tr[data-row]')];const last=Number(rows[rows.length-1]?.dataset.row||0);return last>50})()",
+  );
+  await c.evaluate(
+    win,
+    "(()=>{const el=document.querySelector('.table-wrap');el.scrollTop=0;el.dispatchEvent(new Event('scroll'))})()",
+  );
+  await c.check(
+    win,
+    "Excel virtual scroll returns to first rows",
+    "document.querySelector('tbody tr[data-row=\"0\"]')?.querySelector('th')?.textContent==='1'",
   );
   await c.click(win, "footer button", "上一页");
   await c.click(win, "footer button", "后 100 列");

@@ -14,6 +14,7 @@ import ppt from "../src/modules/ppt/tests/e2e";
 import pdf from "../src/modules/pdf/tests/e2e";
 import text from "../src/modules/text/tests/e2e";
 import image from "../src/modules/image/tests/e2e";
+import bench from "../src/modules/pdf/tests/bench";
 const profile = path.resolve("work/test-profiles/" + process.pid);
 mkdirSync(profile, { recursive: true });
 app.setPath("userData", profile);
@@ -40,10 +41,13 @@ const suites: Record<string, Suite> = {
   pdf,
   text,
   image,
+  bench,
 };
 const requested = process.argv[process.argv.indexOf("--suite") + 1] || "all";
 const selected =
-  requested === "all" ? Object.keys(suites) : requested.split(",");
+  requested === "all"
+    ? Object.keys(suites).filter((n) => n !== "bench")
+    : requested.split(",");
 const output = path.resolve("outputs/verification");
 const fixtureRoot = path.resolve("work/fixtures");
 const digest = (name: string) =>

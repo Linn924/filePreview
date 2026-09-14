@@ -41,5 +41,35 @@ const suite: Suite = async (c) => {
   await c.check(long, 'rapid zoom retains rendered page without errors',
     "document.querySelector('.zoom-control input').value==='137' && [...document.querySelectorAll('canvas')].some(c=>c.width>0) && !document.querySelector('.error')");
   c.close(long);
+  const searchWin = await c.open("document.pdf");
+  await c.click(searchWin, ".pdf-search-toggle");
+  await c.evaluate(
+    searchWin,
+    "(()=>{const i=document.querySelector('.pdf-search-input');i.value='Local Preview';i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()",
+  );
+  await c.check(
+    searchWin,
+    "PDF search finds text hits",
+    "document.querySelector('.pdf-search-count')?.textContent?.includes('/')",
+  );
+  await c.check(
+    searchWin,
+    "PDF search marks hit page",
+    "!!document.querySelector('.pdf-page.has-hit')",
+  );
+  await c.click(searchWin, ".pdf-nav-toggle");
+  await c.check(
+    searchWin,
+    "PDF nav panel opens",
+    "!!document.querySelector('.pdf-nav') && !!document.querySelector('.pdf-thumbs, .pdf-outline')",
+  );
+  await c.click(searchWin, ".pdf-nav-tabs button", "缩略图");
+  await c.check(
+    searchWin,
+    "PDF thumbnails render",
+    "document.querySelectorAll('.pdf-thumbs .thumb').length>=2",
+  );
+  await c.snapshot(searchWin, "pdf-search-nav");
+  c.close(searchWin);
 };
 export default suite;

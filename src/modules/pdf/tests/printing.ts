@@ -92,6 +92,11 @@ const suite: Suite = async (c) => {
     );
     await c.check(
       win,
+      "paper layout preview canvas present",
+      "!!document.querySelector('.paper-layout-preview canvas')",
+    );
+    await c.check(
+      win,
       "PDF paper choices include A4/A5",
       "[...document.querySelector('[aria-label=打印纸张]').options].some(o=>o.value==='A5')",
     );

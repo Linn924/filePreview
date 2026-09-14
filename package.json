@@ -21,7 +21,9 @@
     "test:smoke": "npm test -- --suite all",
     "test": "tsx tests/run.ts",
     "test:fixtures": "tsx scripts/fixtures.ts",
-    "test:package": "tsx tests/package.ts"
+    "test:package": "tsx tests/package.ts",
+    "bench": "tsx scripts/bench.ts",
+    "bench:ui": "npm test -- --suite bench"
   },
   "devDependencies": {
     "@aiden0z/pptx-renderer": "^1.2.4",
