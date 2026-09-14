@@ -12,7 +12,9 @@
     "dev:web": "vite --host 127.0.0.1",
     "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.electron.json",
     "build": "npm run typecheck && tsx scripts/icon.ts && tsx scripts/build-electron.ts && tsx scripts/associations.ts && vite build && tsx scripts/copy-assets.ts",
-    "build:win": "npm run build && electron-builder --win nsis zip --x64 && npm run verify:release",
+    "build:win": "npm run build && electron-builder --win nsis --x64 && npm run verify:release",
+    "build:win:zip": "npm run build && electron-builder --win zip --x64 && npm run verify:release -- --zip",
+    "build:win:all": "npm run build && electron-builder --win nsis zip --x64 && npm run verify:release -- --zip",
     "verify:release": "tsx scripts/verify-release.ts",
     "build:dir": "npm run build && electron-builder --win --dir --x64",
     "start": "electron .",
@@ -59,8 +61,7 @@
     "asar": true,
     "win": {
       "target": [
-        "nsis",
-        "zip"
+        "nsis"
       ],
       "signAndEditExecutable": true,
       "icon": "assets/icon.ico",

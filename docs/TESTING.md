@@ -112,7 +112,17 @@ npm test -- --suite all
 
 ## 安装包与 ZIP 验证
 
-`build:win` 完成后自动调用 `verify:release`：检查 EXE/NSIS 标识、应用载荷大小下限、blockmap 非空；完整校验 ZIP CRC，核对 ZIP 中 EXE 和 app.asar 与构建目录一致，全部通过后生成 SHA256SUMS.txt。可单独运行 `npm run verify:release`。截断安装包必须返回非零状态。此检查不是安装包所有字节的完整性证明；安装与启动验收仍必须执行。失败后旧校验清单不代表本次成功，以命令退出码为准。
+默认 `build:win` **只生成 NSIS 安装包**，完成后自动调用 `verify:release`：检查 EXE/NSIS 标识、应用载荷大小下限、blockmap 非空，通过后生成仅含安装包的 SHA256SUMS.txt。
+
+需要免安装 ZIP 时：
+
+```powershell
+npm run build:win:zip   # 只出 ZIP，并校验 CRC 与 win-unpacked 一致性
+npm run build:win:all   # 安装包 + ZIP，两者都校验
+npm run verify:release -- --zip   # 对已有产物额外做 ZIP 校验
+```
+
+可单独运行 `npm run verify:release`（仅安装包）。截断安装包必须返回非零状态。此检查不是安装包所有字节的完整性证明；安装与启动验收仍必须执行。失败后旧校验清单不代表本次成功，以命令退出码为准。
 
 ```powershell
 npm run build:win
@@ -126,7 +136,7 @@ npm run test:package
 1. 安装新版，确认桌面/开始菜单/系统窗口/托盘仍使用眼睛 logo，软件内容区左上角没有品牌图标和文字。
 2. 右击 PDF、DOCX、XLSX、PPTX → 打开方式 → File Preview；第一次启动和已运行时分别检查。
 3. 含空格、中文的路径也能打开；不得把默认 Office 关联强制替换。
-4. 完整解压 ZIP，运行 EXE；手动“选择其他应用”指向 ZIP 内 EXE 也能打开文件。
+4. 若发布了 ZIP：完整解压 ZIP，运行 EXE；手动“选择其他应用”指向 ZIP 内 EXE 也能打开文件。
 5. 点击预览窗口 ×，仅该窗口关闭；点击首页 ×，依次验证取消、隐藏和退出，托盘菜单能恢复和彻底退出。
 6. 重启后主题、关闭方式、多文件方式仍保留；不能恢复上次文件或显示最近路径。
 7. 在页面内容与空白区域都连续滚动；跨过页面边界时页码跟随，倍率不变；输入页码及上下页按钮只滚动定位。

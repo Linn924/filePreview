@@ -34,7 +34,7 @@ PDF 的 `index.ts` 通过可选 `toolbar` 注册专属打印入口。`src/module
 
 每个格式目录包含 `index.ts`、`index.vue`、`style.css`、解析组合函数或渲染器，以及 `tests/e2e.ts`。格式 CSS 应限定在本类型容器下，避免提高通用表格选择器的优先级；Word/PPT 的第三方内容放入 Shadow DOM 隔离。
 
-`npm ci` 后运行 `npm run build:win` 生成 Windows 安装包与 ZIP。`npm run build` 依次类型检查、转换用户图标、编译 Electron 主进程/预加载、生成 Open With 安装注册、构建 Vue 和复制离线 PDF 资源与第三方许可证。源文件均为 TypeScript；生成的 `electron-dist/`、`dist/` 不提交。
+`npm ci` 后运行 `npm run build:win` 生成 Windows **安装包**（默认仅 NSIS）。需要免安装 ZIP 时用 `npm run build:win:zip`；两者一起出用 `npm run build:win:all`。`npm run build` 依次类型检查、转换用户图标、编译 Electron 主进程/预加载、生成 Open With 安装注册、构建 Vue 和复制离线 PDF 资源与第三方许可证。源文件均为 TypeScript；生成的 `electron-dist/`、`dist/` 不提交。
 
 `scripts/associations.ts` 从共享扩展名列表生成 NSIS 注册，仅添加本软件的 Open With 候选。卸载仅移除本软件的键，不写入扩展名默认值或 UserChoice。
 
