@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge, Settings } from "../shared/contracts";
 const bridge: DesktopBridge = {
-  openPrintPanel:file=>ipcRenderer.invoke("print:open-panel",file),
+  openPrintPanel:files=>ipcRenderer.invoke("print:open-panel",files),
   printPanelFiles:()=>ipcRenderer.invoke("print:panel-files"),
   onPrintIncoming:handler=>{ipcRenderer.on("print:incoming",handler);return()=>ipcRenderer.removeListener("print:incoming",handler)},
   previewPrintFile:file=>ipcRenderer.invoke("print:preview-file",file),

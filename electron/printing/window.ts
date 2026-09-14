@@ -13,11 +13,12 @@ export function setupPrintWindow(
     loading: Promise<void> | undefined;
   const incoming: PreviewFile[] = [];
   let busy = false;
-  ipcMain.handle("print:open-panel", async (event, file: PreviewFile) => {
+  ipcMain.handle("print:open-panel", async (event, files: PreviewFile[]) => {
     trusted(event);
-    if (file?.ext !== "pdf") throw Error("只支持 PDF。");
     preview = BrowserWindow.fromWebContents(event.sender) || undefined;
-    incoming.push(file);
+    const list = Array.isArray(files) ? files : [];
+    for (const file of list)
+      if (file?.ext === "pdf" && file?.id) incoming.push(file);
     if (!panel || panel.isDestroyed()) {
       busy = false;
       const area = screen.getDisplayMatching(

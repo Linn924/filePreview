@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { inject, ref, type ShallowRef } from "vue";
 import type { PreviewFile } from "../../../../shared/contracts";
 import { printError } from "./errorMessage";
 const props = defineProps<{ file: PreviewFile }>();
 const error = ref("");
+const previewFiles = inject<ShallowRef<PreviewFile[]>>("previewFiles");
 async function open() {
   try {
-    await window.localPreview.openPrintPanel(props.file);
+    const { printEntry } = await window.localPreview.getSettings();
+    let files: PreviewFile[] = [];
+    if (printEntry === "all")
+      files = (previewFiles?.value || []).filter((f) => f.ext === "pdf");
+    else if (printEntry === "current") files = [props.file];
+    await window.localPreview.openPrintPanel(files);
   } catch (e) {
     error.value = printError(e);
   }

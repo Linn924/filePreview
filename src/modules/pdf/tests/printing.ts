@@ -67,11 +67,17 @@ const suite: Suite = async (c) => {
   };
   app.on("web-contents-created", intercept);
   try {
+    c.program.updateSettings({ printEntry: "current", multiFileMode: "windows" });
     const preview = await c.open("document.pdf");
     await c.click(preview, ".pdf-print-button");
     const win = BrowserWindow.getAllWindows().find((w) =>
       w.webContents.getURL().includes("print-panel=1"),
     )!;
+    await c.check(
+      win,
+      "printEntry current adds only the active PDF",
+      "document.querySelectorAll('.print-files li').length===1",
+    );
     if (!win || win.isModal() || !win.isResizable())
       throw Error("Print settings must be independent resizable window");
     await c.check(
@@ -229,11 +235,19 @@ const suite: Suite = async (c) => {
     const pb = preview.getBounds(),
       sb = win.getBounds();
     if (pb.x + pb.width > sb.x + 2) throw Error("Side-by-side windows overlap "+JSON.stringify({pb,sb}));
+    c.program.updateSettings({ printEntry: "current" });
     await c.click(preview, ".preview-tab .pdf-print-button");
     await c.check(
       win,
       "reopening same tab retains one entry",
       "document.querySelectorAll('.print-files li').length===15",
+    );
+    c.program.updateSettings({ printEntry: "all" });
+    await c.click(preview, ".preview-tab .pdf-print-button");
+    await c.check(
+      win,
+      "printEntry all adds missing PDF tabs by id dedupe",
+      "document.querySelectorAll('.print-files li').length>=15",
     );
     c.close(preview);
     await c.click(win, ".preview-print-file");
@@ -259,6 +273,49 @@ const suite: Suite = async (c) => {
       "!document.querySelector('.pdf-print-button')",
     );
     c.close(text);
+    c.program.updateSettings({ multiFileMode: "tabs", printEntry: "all" });
+    const multi = await c.program.openPaths([
+      c.fixture("document.pdf"),
+      c.fixture("document.pdf"),
+    ]);
+    await c.check(
+      multi[0],
+      "multi-PDF tabs loaded",
+      "document.querySelectorAll('.tab').length===2 && !document.querySelector('.loading')",
+    );
+    await c.pause(500);
+    await c.click(multi[0], ".pdf-print-button");
+    await c.pause(400);
+    const panelAll = BrowserWindow.getAllWindows().find((w) =>
+      w.webContents.getURL().includes("print-panel=1"),
+    );
+    if (!panelAll) throw Error("printEntry all did not open panel");
+    await c.check(
+      panelAll,
+      "printEntry all lists every open PDF tab",
+      "document.querySelectorAll('.print-files li').length===2",
+    );
+    c.close(panelAll);
+    c.close(multi[0]);
+    await c.pause(400);
+    c.program.updateSettings({ printEntry: "none" });
+    const noneWin = await c.open("document.pdf");
+    await c.pause(300);
+    await c.click(noneWin, ".pdf-print-button");
+    await c.pause(400);
+    const panelNone = BrowserWindow.getAllWindows().find((w) =>
+      w.webContents.getURL().includes("print-panel=1"),
+    );
+    if (!panelNone) throw Error("printEntry none did not open panel");
+    await c.check(
+      panelNone,
+      "printEntry none opens without auto-adding files",
+      "document.querySelectorAll('.print-files li').length===0",
+    );
+    c.close(panelNone);
+    c.close(noneWin);
+    await c.pause(300);
+    c.program.updateSettings({ printEntry: "all" });
   } finally {
     app.removeListener("web-contents-created", intercept);
     dialog.showOpenDialog = realDialog;

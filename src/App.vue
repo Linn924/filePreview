@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, shallowRef, nextTick } from "vue";
+import { onMounted, onBeforeUnmount, provide, ref, shallowRef, nextTick } from "vue";
 import { useImmersive } from "./composables/useImmersive";
 import PreviewTab from "./components/PreviewTab.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
@@ -16,6 +16,7 @@ let dragDepth = 0;
 let draggedTab = "";
 const tabMime = "application/x-file-preview-tab";
 const cleanups: Array<() => void> = [];
+provide("previewFiles", files);
 function startDrag(event: DragEvent, id: string) {
   draggedTab = id;
   event.dataTransfer?.setData(tabMime, id);

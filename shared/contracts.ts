@@ -8,12 +8,14 @@ export interface PreviewFile {
   view?: { zoom: number; scroll: Array<{ top: number; left: number }>; fit?: 'original' | 'width' | 'page'; encoding?: string; excel?: { sheet: string; columns: number; rows: number; widths: Record<string, number> } };
 }
 export type Theme = "light" | "dark" | "system";
+export type PrintEntry = "all" | "current" | "none";
 export interface Settings {
   theme: Theme;
   closeAction: "ask" | "quit" | "tray";
   multiFileMode: "ask" | "tabs" | "windows";
   defaultZoom: number;
   maximizePreview: boolean;
+  printEntry: PrintEntry;
 }
 export const defaults: Settings = {
   theme: "light",
@@ -21,6 +23,7 @@ export const defaults: Settings = {
   multiFileMode: "ask",
   defaultZoom: 100,
   maximizePreview: true,
+  printEntry: "all",
 };
 export const extensions = [
   "docx",
@@ -69,10 +72,13 @@ export function normalizeSettings(
       typeof input.maximizePreview === "boolean"
         ? input.maximizePreview
         : base.maximizePreview,
+    printEntry: ["all", "current", "none"].includes(input.printEntry ?? "")
+      ? input.printEntry!
+      : base.printEntry,
   };
 }
 export interface DesktopBridge {
-  openPrintPanel(file:PreviewFile):Promise<void>;
+  openPrintPanel(files:PreviewFile[]):Promise<void>;
   printPanelFiles():Promise<PreviewFile[]>;
   onPrintIncoming(handler:()=>void):()=>void;
   previewPrintFile(file:PreviewFile):Promise<void>;

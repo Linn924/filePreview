@@ -38,6 +38,12 @@ assert.deepEqual(normalizeSettings({}), defaults);
 assert.equal(normalizeSettings({ defaultZoom: NaN }).defaultZoom, 100);
 assert.equal(normalizeSettings({ defaultZoom: 0 }).defaultZoom, 25);
 assert.equal(normalizeSettings({ theme: "dark" }).theme, "dark");
+assert.equal(normalizeSettings({}).printEntry, "all");
+assert.equal(normalizeSettings({ printEntry: "none" }).printEntry, "none");
+assert.equal(
+  normalizeSettings({ printEntry: "bogus" as never }).printEntry,
+  "all",
+);
 assert.equal(
   "filePath" in normalizeSettings({ filePath: "secret" } as never),
   false,

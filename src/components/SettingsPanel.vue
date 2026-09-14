@@ -99,6 +99,23 @@ const emit = defineEmits<{ close: []; change: [value: Partial<Settings>] }>();
           "
         />
       </div>
+      <div class="setting-row">
+        <label for="print-entry">点击“打印 PDF”时列表</label
+        ><select
+          id="print-entry"
+          :value="settings.printEntry"
+          @change="
+            emit('change', {
+              printEntry: ($event.target as HTMLSelectElement)
+                .value as Settings['printEntry'],
+            })
+          "
+        >
+          <option value="all">本窗口全部 PDF</option>
+          <option value="current">仅当前文件</option>
+          <option value="none">不自动加入（手动添加）</option>
+        </select>
+      </div>
 
       <p class="settings-help">设置自动保存。文件和预览记录不会保存。</p>
     </section>
