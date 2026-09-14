@@ -1,11 +1,32 @@
 /** Temporary DOM-only column sizing. No document data is written back. */
-export function attachTableResize(root: ShadowRoot | HTMLElement): () => void {
+export interface TableResizeOptions {
+  /** `tableIndex:colIndex` → px */
+  initial?: Record<string, number>;
+  onChange?: (widths: Record<string, number>) => void;
+}
+export function attachTableResize(
+  root: ShadowRoot | HTMLElement,
+  options: TableResizeOptions = {},
+): () => void {
   const cleanups: Array<() => void> = [];
-  root.querySelectorAll<HTMLTableElement>("table").forEach((table) => {
+  const widths: Record<string, number> = { ...(options.initial || {}) };
+  const emit = () => options.onChange?.({ ...widths });
+  root.querySelectorAll<HTMLTableElement>("table").forEach((table, tableIndex) => {
     table.style.tableLayout = "fixed";
     table.style.minWidth = table.getBoundingClientRect().width + "px";
     const cells = Array.from(table.rows[0]?.cells || []);
-    for (const cell of cells) {
+    cells.forEach((cell, colIndex) => {
+      const key = `${tableIndex}:${colIndex}`;
+      const saved = widths[key];
+      if (saved && saved > 0) {
+        cell.style.width = saved + "px";
+        const tableW =
+          table.offsetWidth + saved - (cell.offsetWidth || saved);
+        if (tableW > 0) {
+          table.style.width = tableW + "px";
+          table.style.minWidth = table.style.width;
+        }
+      }
       cell.style.position = "relative";
       const handle = document.createElement("span");
       handle.className = "column-resize-handle";
@@ -31,6 +52,8 @@ export function attachTableResize(root: ShadowRoot | HTMLElement): () => void {
           cell.style.width = next + "px";
           table.style.width = tableWidth + next - width + "px";
           table.style.minWidth = table.style.width;
+          widths[key] = next;
+          emit();
         };
         const up = () => {
           handle.removeEventListener("pointermove", move);
@@ -48,7 +71,7 @@ export function attachTableResize(root: ShadowRoot | HTMLElement): () => void {
         handle.removeEventListener("pointerdown", down);
         handle.remove();
       });
-    }
+    });
   });
   return () => cleanups.forEach((fn) => fn());
 }

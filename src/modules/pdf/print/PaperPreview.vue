@@ -3,7 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { PreviewFile } from "../../../../shared/contracts";
-import { paperSize, selectedPages, type PdfPrintOptions } from "../../../../shared/printing";
+import {
+  paperSize,
+  selectedPages,
+  applyPageOrder,
+  printScaleFactor,
+  type PdfPrintOptions,
+} from "../../../../shared/printing";
 
 const props = defineProps<{ file: PreviewFile; options: PdfPrintOptions }>();
 const canvas = ref<HTMLCanvasElement>();
@@ -12,9 +18,17 @@ let disposed = false;
 let loading: ReturnType<typeof getDocument> | undefined;
 
 const paper = computed(() => paperSize(props.options));
+const scaleLabel = computed(
+  () =>
+    ({
+      fit: "适合纸张",
+      actual: "实际大小 100%",
+      shrink: "仅缩小",
+    })[props.options.scale || "fit"],
+);
 const label = computed(
   () =>
-    `排版示意：原页适配到 ${props.options.paper}${props.options.landscape ? " 横向" : " 纵向"}，约 10mm 边距`,
+    `排版示意：${scaleLabel.value} · ${props.options.paper}${props.options.landscape ? " 横向" : " 纵向"} · 页序 ${props.options.pageOrder || "forward"} · 约 10mm 边距`,
 );
 
 async function draw() {
@@ -26,17 +40,13 @@ async function draw() {
     loading = getDocument({ data: props.file.bytes.slice() });
     const pdf = await loading.promise;
     if (disposed) return;
-    const pages = selectedPages(props.options.range || "", pdf.numPages);
+    const ranged = selectedPages(props.options.range || "", pdf.numPages);
+    const pages = applyPageOrder(ranged, props.options.pageOrder || "forward");
     const pageNum = pages[0] || 1;
     const page = await pdf.getPage(pageNum);
     if (disposed) return;
     const original = page.getViewport({ scale: 1 });
-    const paperPtW = (paper.value.width * 72) / 25.4;
-    const paperPtH = (paper.value.height * 72) / 25.4;
-    const fit = Math.min(
-      (paperPtW - (20 * 72) / 25.4) / original.width,
-      (paperPtH - (20 * 72) / 25.4) / original.height,
-    );
+    const fit = printScaleFactor(original, paper.value, props.options.scale || "fit");
     const displayScale = 0.35;
     const viewport = page.getViewport({
       scale: fit * displayScale * devicePixelRatio,
@@ -51,7 +61,13 @@ async function draw() {
 }
 
 watch(
-  () => [props.options.paper, props.options.landscape, props.options.range],
+  () => [
+    props.options.paper,
+    props.options.landscape,
+    props.options.range,
+    props.options.scale,
+    props.options.pageOrder,
+  ],
   () => void draw(),
 );
 onMounted(() => void draw());

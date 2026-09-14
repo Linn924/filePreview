@@ -41,6 +41,14 @@ async function preview(file: PreviewFile) {
 function arrange() {
   void window.localPreview.arrangePrintWindows();
 }
+async function openQueue() {
+  try {
+    const msg = await window.localPreview.openPrintQueue();
+    queueNote.value = msg;
+  } catch (e) {
+    error.value = printError(e);
+  }
+}
 onBeforeUnmount(() => {
   incomingCleanup?.();
   themeCleanup?.();
@@ -60,7 +68,8 @@ async function dropFiles(event: DragEvent) {
   }
 }
 const printers = ref<Printer[]>([]),
-  error = ref("");
+  error = ref(""),
+  queueNote = ref("");
 onMounted(async () => {
   document.title = "PDF 打印设置";
   incomingCleanup = window.localPreview.onPrintIncoming(() => void receive());
@@ -102,7 +111,12 @@ async function choose() {
     >
       <header>
         <h2>PDF 批量打印</h2>
-        <button @click="arrange">并排查看</button>
+        <span
+          ><button @click="arrange">并排查看</button
+          ><button class="open-print-queue" @click="openQueue">
+            系统打印机/队列
+          </button></span
+        >
       </header>
       <label class="batch-printer"
         >打印机<select v-model="deviceName" :disabled="busy">
@@ -111,12 +125,18 @@ async function choose() {
             :key="printer.name"
             :value="printer.name"
           >
-            {{ printer.displayName }}
+            {{ printer.displayName
+            }}{{ printer.status ? " · " + printer.status : "" }}
           </option>
         </select></label
       >
       <p>拖入 PDF 或点击“添加 PDF”；在每个文件下设置参数并勾选打印。</p>
       <p v-if="!printers.length">未找到打印机，请先在 Windows 中配置打印机。</p>
+      <p v-if="queueNote" class="queue-note" role="status">{{ queueNote }}</p>
+      <p v-else class="queue-hint">
+        提交成功仅表示进入系统打印队列，是否出纸请打开「系统打印机/队列」查看。
+        纸张、双面、彩色等能力取决于打印机驱动，本软件无法保证全部支持。
+      </p>
       <ol class="print-files">
         <li
           v-for="(row, index) in files"
@@ -151,7 +171,12 @@ async function choose() {
             {{ row.options.paper }} ·
             {{ row.options.landscape ? "横向" : "纵向" }} ·
             {{ row.options.copies }} 份 · {{ row.options.range || "全部页"
-            }}<button
+            }}<template v-if="row.options.scale">
+              · {{ { fit: "适合纸张", actual: "实际大小", shrink: "仅缩小" }[row.options.scale] }}</template
+            ><template v-if="row.options.pageOrder && row.options.pageOrder !== 'forward'">
+              ·
+              {{ { reverse: "逆序", odd: "奇数页", even: "偶数页" }[row.options.pageOrder] }}</template
+            ><button
               class="toggle-print-options"
               :aria-expanded="row.expanded"
               @click="row.expanded = !row.expanded"

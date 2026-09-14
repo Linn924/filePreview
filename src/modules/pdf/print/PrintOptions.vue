@@ -40,12 +40,27 @@ defineProps<{ modelValue: PdfPrintOptions; busy: boolean }>();
         <option :value="true">彩色</option>
         <option :value="false">黑白</option>
       </select></label
+    ><label
+      >缩放<select v-model="modelValue.scale" :disabled="busy">
+        <option value="fit">适合纸张</option>
+        <option value="actual">实际大小（100%）</option>
+        <option value="shrink">仅缩小（不放大）</option>
+      </select></label
+    ><label
+      >页序<select v-model="modelValue.pageOrder" :disabled="busy">
+        <option value="forward">顺序</option>
+        <option value="reverse">逆序</option>
+        <option value="odd">仅奇数页</option>
+        <option value="even">仅偶数页</option>
+      </select></label
     ><label class="print-range"
       >页码范围<input
         v-model="modelValue.range"
         placeholder="留空打印全部，例如 1-3,5"
         :disabled="busy"
-      /><small>仅用于此文件；留空表示全部页。</small></label
+      /><small
+        >仅用于此文件；留空表示全部页。页序在范围筛选之后应用。</small
+      ></label
     >
   </div>
 </template>

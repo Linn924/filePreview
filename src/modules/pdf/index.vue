@@ -12,13 +12,32 @@ const emit = defineEmits<{
   error: [message: string];
   "update:zoom": [value: number];
 }>();
-const { scroll, pages, current, sync, jump, dimensions, pdf } = usePreview(
-  props,
-  emit,
-);
+const {
+  scroll,
+  pages,
+  current,
+  sync,
+  jump,
+  dimensions,
+  pdf,
+  needPassword,
+  passwordError,
+  unlock,
+  rotate,
+  setRotate,
+} = usePreview(props, emit);
 const search = usePdfSearch(pdf);
 const searchOpen = ref(false);
 const navOpen = ref(false);
+const passwordInput = ref("");
+function cycleRotate() {
+  const next = (((rotate.value + 90) % 360) as 0 | 90 | 180 | 270);
+  setRotate(next);
+}
+async function submitPassword() {
+  await unlock(passwordInput.value);
+  passwordInput.value = "";
+}
 const highlightPages = computed(() => {
   const set = new Set<number>();
   for (const h of search.hits.value) set.add(h.page - 1);
@@ -131,8 +150,33 @@ watch(
       >
         {{ navOpen ? "隐藏导航" : "目录 / 缩略图" }}
       </button>
+      <button
+        type="button"
+        class="pdf-rotate"
+        title="临时旋转预览（不修改源文件）"
+        @click="cycleRotate"
+      >
+        旋转 {{ rotate }}°
+      </button>
     </div>
-    <div class="pdf-body">
+    <form
+      v-if="needPassword"
+      class="pdf-password"
+      @submit.prevent="submitPassword"
+    >
+      <strong>PDF 受密码保护</strong>
+      <p v-if="passwordError" role="alert">{{ passwordError }}</p>
+      <input
+        v-model="passwordInput"
+        type="password"
+        aria-label="PDF 密码"
+        placeholder="输入打开密码"
+        autocomplete="off"
+      />
+      <button type="submit">解锁预览</button>
+      <small>密码仅用于本次内存解密，不会写入设置或磁盘。</small>
+    </form>
+    <div v-else class="pdf-body">
       <PdfNav
         v-if="navOpen && pdf"
         :pdf="pdf"

@@ -10,6 +10,7 @@ const bridge: DesktopBridge = {
   printPanelBusy:value=>ipcRenderer.send("print:panel-busy",value),
   dropPrintPdfs:files=>ipcRenderer.invoke("print:drop",files.map(file=>webUtils.getPathForFile(file))),
   printers: () => ipcRenderer.invoke("print:printers"),
+  openPrintQueue: () => ipcRenderer.invoke("print:open-queue"),
   selectPrintPdfs: () => ipcRenderer.invoke("print:select"),
   printPdf: (job) => ipcRenderer.invoke("print:submit", job),
   consumePrint: () => ipcRenderer.invoke("print:consume"),

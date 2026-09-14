@@ -4,6 +4,7 @@ import { onMounted, onBeforeUnmount, ref, shallowRef, watch, nextTick } from "vu
 import {
   getDocument,
   GlobalWorkerOptions,
+  type PDFDocumentLoadingTask,
   type PDFDocumentProxy,
   type RenderTask,
 } from "pdfjs-dist";
@@ -20,14 +21,17 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const { current, sync, jump } = useContinuousPages(scroll, elements);
   let pdf: PDFDocumentProxy | undefined,
     observer: IntersectionObserver | undefined,
-    resize: ResizeObserver | undefined;
+    resize: ResizeObserver | undefined,
+    load: PDFDocumentLoadingTask | undefined;
   const pdfRef = shallowRef<PDFDocumentProxy | undefined>();
+  const needPassword = ref(false);
+  const passwordError = ref("");
+  const rotate = ref<0 | 90 | 180 | 270>(props.file.view?.rotate || 0);
   let disposed = false,
     revision = 0;
   let queue = Promise.resolve();
   const rendered = new Set<number>();
   const tasks = new Set<RenderTask>();
-  // Correct estimated page sizes without moving the page currently being read.
   async function updateSizes(updates: Array<{ index: number; width: number; height: number }>) {
     if (disposed) return;
     updates = updates.filter(p => pages.value[p.index]?.width !== p.width || pages.value[p.index]?.height !== p.height);
@@ -43,14 +47,14 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       root.scrollTop += anchor.getBoundingClientRect().top - top;
   }
   const base = new URL("./pdf-assets/", location.href).href;
-  const load = getDocument({
-    data: props.file.bytes.slice(),
-    cMapUrl: base + "cmaps/",
-    cMapPacked: true,
-    standardFontDataUrl: base + "standard_fonts/",
-    wasmUrl: base + "wasm/",
-    useSystemFonts: true,
-  });
+  function displayWH(index: number) {
+    const p = pages.value[index];
+    if (!p) return { width: 1, height: 1 };
+    const r = ((rotate.value % 360) + 360) % 360;
+    if (r === 90 || r === 270)
+      return { width: p.height, height: p.width };
+    return p;
+  }
   const scale = (width: number, height: number) =>
     (fitScale(
       width,
@@ -67,9 +71,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     100;
   function dimensions(index: number) {
     void layout.value;
-    const p = pages.value[index],
-      s = scale(p.width, p.height);
-    return { width: p.width * s + "px", height: p.height * s + "px" };
+    const d = displayWH(index);
+    const s = scale(d.width, d.height);
+    return { width: d.width * s + "px", height: d.height * s + "px" };
   }
   function render(index: number) {
     const token = revision;
@@ -84,9 +88,11 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         const original = page.getViewport({ scale: 1 });
         await updateSizes([{ index, width: original.width, height: original.height }]);
         if (disposed || token !== revision) return;
+        const d = displayWH(index);
         const ratio = Math.min(devicePixelRatio, 2);
         const viewport = page.getViewport({
-          scale: scale(original.width, original.height) * ratio,
+          scale: scale(d.width, d.height) * ratio,
+          rotation: (page.rotate + rotate.value) % 360,
         });
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
@@ -134,23 +140,45 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     await nextTick();
     observe();
   }
-  onMounted(async () => {
+  function setRotate(value: 0 | 90 | 180 | 270) {
+    rotate.value = value;
+    props.file.view ??= { zoom: props.zoom, scroll: [] };
+    props.file.view.rotate = value;
+    void refresh();
+  }
+  async function bootstrap(password?: string) {
+    needPassword.value = false;
+    passwordError.value = "";
     try {
+      void load?.destroy();
+      load = getDocument({
+        data: props.file.bytes.slice(),
+        password,
+        cMapUrl: base + "cmaps/",
+        cMapPacked: true,
+        standardFontDataUrl: base + "standard_fonts/",
+        wasmUrl: base + "wasm/",
+        useSystemFonts: true,
+      });
       pdf = await load.promise;
       pdfRef.value = pdf;
       if (disposed) return;
       const first = await pdf.getPage(1);
       if (disposed) return;
       const initial = first.getViewport({ scale: 1 });
-      pages.value = Array.from({ length: pdf.numPages }, () => ({ width: initial.width, height: initial.height }));
+      pages.value = Array.from({ length: pdf.numPages }, () => ({
+        width: initial.width,
+        height: initial.height,
+      }));
       await nextTick();
       await render(0);
       if (disposed) return;
       observe();
-      resize = new ResizeObserver(() => void refresh());
-      resize.observe(scroll.value!);
+      if (!resize) {
+        resize = new ResizeObserver(() => void refresh());
+        resize.observe(scroll.value!);
+      }
       emit("ready");
-      // Yield so the first canvas can paint before remaining page metadata loads.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       let sizes: Array<{ index: number; width: number; height: number }> = [];
       for (let n = 2; n <= pdf.numPages; n++) {
@@ -166,10 +194,22 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         }
       }
     } catch (e) {
-      if (!disposed)
-        emit("error", previewError(e, 'PDF 文件'));
+      if (disposed) return;
+      const name = (e as { name?: string })?.name || "";
+      if (name === "PasswordException" || /password/i.test(String(e))) {
+        needPassword.value = true;
+        passwordError.value = password
+          ? "密码不正确，请重试。"
+          : "此 PDF 受密码保护，请输入密码后继续。";
+        return;
+      }
+      emit("error", previewError(e, "PDF 文件"));
     }
-  });
+  }
+  async function unlock(password: string) {
+    await bootstrap(password);
+  }
+  onMounted(() => void bootstrap());
   watch(
     () => props.zoom,
     () => void refresh(),
@@ -189,7 +229,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     observer?.disconnect();
     resize?.disconnect();
     tasks.forEach((t) => t.cancel());
-    void load.destroy();
+    void load?.destroy();
   });
   return {
     scroll,
@@ -199,5 +239,10 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     jump,
     dimensions,
     pdf: pdfRef,
+    needPassword,
+    passwordError,
+    unlock,
+    rotate,
+    setRotate,
   };
 }

@@ -10,6 +10,8 @@ import {
   selectedPages,
   printDefaults,
   validatePrintOptions,
+  applyPageOrder,
+  printScaleFactor,
 } from "../shared/printing";
 import { fitScale } from "../src/composables/fit";
 assert.deepEqual(paperSize({ ...printDefaults, paper: "A5" }), {
@@ -22,8 +24,25 @@ assert.deepEqual(
 );
 assert.deepEqual(selectedPages("1-3,2,5", 5), [1, 2, 3, 5]);
 assert.throws(() => selectedPages("6", 5));
+assert.deepEqual(applyPageOrder([1, 2, 3, 4], "reverse"), [4, 3, 2, 1]);
+assert.deepEqual(applyPageOrder([1, 2, 3, 4], "odd"), [1, 3]);
+assert.deepEqual(applyPageOrder([1, 2, 3, 4], "even"), [2, 4]);
+assert.equal(
+  printScaleFactor({ width: 72, height: 72 }, { width: 210, height: 297 }, "actual"),
+  1,
+);
+assert.ok(
+  printScaleFactor({ width: 720, height: 720 }, { width: 148, height: 210 }, "shrink") < 1,
+);
 assert.throws(() =>
   validatePrintOptions({ ...printDefaults, deviceName: "printer", copies: 0 }),
+);
+assert.throws(() =>
+  validatePrintOptions({
+    ...printDefaults,
+    deviceName: "p",
+    scale: "bogus" as never,
+  }),
 );
 assert.equal(fitScale(100, 200, 400, 400, "width"), 4);
 assert.equal(fitScale(100, 200, 400, 400, "page"), 2);

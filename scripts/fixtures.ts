@@ -155,6 +155,31 @@ pdf +=
     .join("") +
   `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
 await save("document.pdf", Buffer.from(pdf));
+// Office complex-layout samples (generated, no network).
+{
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  const cell = (text: string, w = 1800) =>
+    `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+  const row = (cells: string) => `<w:tr>${cells}</w:tr>`;
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>复杂表格样例</w:t></w:r></w:p><w:tbl><w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="1800"/><w:gridCol w:w="3600"/></w:tblGrid>${row(
+      cell("产品") + cell("数量") + cell("备注（宽列）"),
+    )}${row(cell("File Preview") + cell("2") + cell("用于列宽拖动与跨窗口迁移回归"))}${row(
+      cell("合计") + cell("2") + cell("—"),
+    )}</w:tbl><w:p><w:r><w:t>字体与对齐混合</w:t></w:r></w:p></w:body></w:document>`,
+  );
+  await save("complex-table.docx", await zip.generateAsync({ type: "nodebuffer" }));
+}
 for (const [name, url] of [
   [
     "legacy.ppt",

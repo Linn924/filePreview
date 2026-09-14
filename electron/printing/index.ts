@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, dialog, type Session } from "electron";
+import { BrowserWindow, ipcMain, dialog, shell, type Session } from "electron";
 import path from "node:path";
 import { trusted, protectWindow } from "../security";
 import { readPreviewFile } from "../files";
@@ -17,11 +17,29 @@ export function setupPrinting(local: Session) {
   ipcMain.handle("print:drop",async(event,paths:unknown)=>{trusted(event);if(!Array.isArray(paths)||paths.some(p=>typeof p!=="string"||!path.isAbsolute(p)||path.extname(p).toLowerCase()!==".pdf"))throw Error("请只拖入 PDF 文件。");const files=[];for(const name of paths)files.push(await readPreviewFile(name));return files;});
   ipcMain.handle("print:printers", async (event) => {
     trusted(event);
-    return (await event.sender.getPrintersAsync()).map((p) => ({
+    const list = await event.sender.getPrintersAsync();
+    return list.map((p) => ({
       name: p.name,
       displayName: p.displayName || p.name,
-      isDefault: false,
+      isDefault: Boolean((p as { isDefault?: boolean }).isDefault),
+      status: (p as { status?: string | number }).status
+        ? String((p as { status?: string | number }).status)
+        : undefined,
+      description: (p as { description?: string }).description || undefined,
     }));
+  });
+  // Open OS printer settings / queue. Never submits a job from this handler.
+  ipcMain.handle("print:open-queue", async (event) => {
+    trusted(event);
+    try {
+      await shell.openExternal("ms-settings:printers");
+      return "已打开系统打印机设置；打印队列请在对应打印机图标中查看。";
+    } catch (e) {
+      throw Error(
+        "无法打开系统打印机设置：" +
+          (e instanceof Error ? e.message : String(e)),
+      );
+    }
   });
   ipcMain.handle("print:select", async (event) => {
     trusted(event);

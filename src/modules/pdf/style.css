@@ -350,3 +350,36 @@
 .paper-layout-error {
   color: #c0392b;
 }
+.queue-hint,
+.queue-note {
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+.queue-note {
+  color: var(--accent);
+}
+.pdf-print-panel header span {
+  display: flex;
+  gap: 8px;
+}
+.pdf-toolbar-row .pdf-rotate {
+  margin-left: auto;
+}
+.pdf-password {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  margin: 12px auto;
+  max-width: 360px;
+}
+.pdf-password input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}

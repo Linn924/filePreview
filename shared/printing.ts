@@ -3,7 +3,12 @@ export interface Printer {
   name: string;
   displayName: string;
   isDefault: boolean;
+  /** Best-effort driver status string when Electron exposes it. */
+  status?: string;
+  description?: string;
 }
+export type PrintScale = "fit" | "actual" | "shrink";
+export type PrintPageOrder = "forward" | "reverse" | "odd" | "even";
 export interface PdfPrintOptions {
   deviceName: string;
   copies: number;
@@ -12,6 +17,10 @@ export interface PdfPrintOptions {
   color: boolean;
   duplex: "simplex" | "longEdge" | "shortEdge";
   range: string;
+  /** fit = scale to paper (may enlarge); actual = 100%; shrink = only shrink if larger. */
+  scale: PrintScale;
+  /** Page sequence after range filter. */
+  pageOrder: PrintPageOrder;
 }
 export interface PdfPrintJob {
   file: PreviewFile;
@@ -25,7 +34,13 @@ export const printDefaults: PdfPrintOptions = {
   color: true,
   duplex: "simplex",
   range: "",
+  scale: "fit",
+  pageOrder: "forward",
 };
+const papers = ["A4", "A3", "A5", "A6", "Letter", "Legal"] as const;
+const duplexes = ["simplex", "longEdge", "shortEdge"] as const;
+const scales = ["fit", "actual", "shrink"] as const;
+const orders = ["forward", "reverse", "odd", "even"] as const;
 export function validatePrintOptions(value: PdfPrintOptions): PdfPrintOptions {
   if (
     !value ||
@@ -34,8 +49,10 @@ export function validatePrintOptions(value: PdfPrintOptions): PdfPrintOptions {
     !Number.isInteger(value.copies) ||
     value.copies < 1 ||
     value.copies > 99 ||
-    !["A4", "A3", "A5", "A6", "Letter", "Legal"].includes(value.paper) ||
-    !["simplex", "longEdge", "shortEdge"].includes(value.duplex) ||
+    !papers.includes(value.paper) ||
+    !duplexes.includes(value.duplex) ||
+    !scales.includes(value.scale ?? "fit") ||
+    !orders.includes(value.pageOrder ?? "forward") ||
     typeof value.landscape !== "boolean" ||
     typeof value.color !== "boolean" ||
     typeof value.range !== "string" ||
@@ -50,6 +67,8 @@ export function validatePrintOptions(value: PdfPrintOptions): PdfPrintOptions {
     color: value.color,
     duplex: value.duplex,
     range: value.range,
+    scale: value.scale ?? "fit",
+    pageOrder: value.pageOrder ?? "forward",
   };
 }
 export function selectedPages(range: string, count: number): number[] {
@@ -65,6 +84,35 @@ export function selectedPages(range: string, count: number): number[] {
     for (let n = from; n <= to; n++) result.add(n);
   }
   return [...result].sort((a, b) => a - b);
+}
+export function applyPageOrder(
+  pages: number[],
+  order: PrintPageOrder,
+): number[] {
+  if (order === "odd") return pages.filter((n) => n % 2 === 1);
+  if (order === "even") return pages.filter((n) => n % 2 === 0);
+  if (order === "reverse") return [...pages].reverse();
+  return pages;
+}
+/** Content area uses ~10mm margin on each side (20mm total). */
+export function contentBoxMm(paper: { width: number; height: number }) {
+  return { width: paper.width - 20, height: paper.height - 20 };
+}
+export function printScaleFactor(
+  originalPt: { width: number; height: number },
+  paperMm: { width: number; height: number },
+  mode: PrintScale,
+): number {
+  const box = contentBoxMm(paperMm);
+  const boxW = (box.width * 72) / 25.4;
+  const boxH = (box.height * 72) / 25.4;
+  const fit = Math.min(
+    boxW / (originalPt.width || 1),
+    boxH / (originalPt.height || 1),
+  );
+  if (mode === "actual") return 1;
+  if (mode === "shrink") return Math.min(1, fit);
+  return fit;
 }
 export function paperSize(options: PdfPrintOptions) {
   let [width, height] =

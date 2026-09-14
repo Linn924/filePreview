@@ -100,6 +100,16 @@ const suite: Suite = async (c) => {
       "PDF paper choices include A4/A5",
       "[...document.querySelector('[aria-label=打印纸张]').options].some(o=>o.value==='A5')",
     );
+    await c.check(
+      win,
+      "print scale and page order controls exist",
+      "!!document.querySelector('.print-options select') && document.body.textContent.includes('适合纸张') && document.body.textContent.includes('仅缩小')",
+    );
+    await c.check(
+      win,
+      "system printer queue button present",
+      "!!document.querySelector('.open-print-queue')",
+    );
     await c.evaluate(
       win,
       "(()=>{const s=document.querySelector('[aria-label=打印纸张]');s.value='A5';s.dispatchEvent(new Event('change',{bubbles:true}))})()",
@@ -108,7 +118,7 @@ const suite: Suite = async (c) => {
     await c.check(
       win,
       "A5 PDF submitted",
-      "document.querySelector('.print-files').textContent.includes('已提交到打印队列')",
+      "document.querySelector('.print-files').textContent.includes('已提交到系统队列')",
     );
     if (
       failed ||
@@ -128,7 +138,7 @@ const suite: Suite = async (c) => {
     await c.check(
       win,
       "selected page printed",
-      "document.querySelector('.print-files').textContent.includes('已提交到打印队列')",
+      "document.querySelector('.print-files').textContent.includes('已提交到系统队列')",
     );
     if (
       calls[1]?.pages !== 1 ||
@@ -155,7 +165,7 @@ const suite: Suite = async (c) => {
     await c.check(
       win,
       "batch submits both PDF jobs",
-      "[...document.querySelectorAll('.print-files li')].every(row=>row.textContent.includes('已提交到打印队列'))",
+      "[...document.querySelectorAll('.print-files li')].every(row=>row.textContent.includes('已提交到系统队列'))",
     );
     if (calls.length !== 4)
       throw Error("Batch queue did not submit exactly two jobs");

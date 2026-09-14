@@ -71,7 +71,8 @@ export function usePrintQueue(initial?: PreviewFile) {
             file: job.file,
             options: job.options,
           });
-          job.row.status = "已提交到打印队列";
+          job.row.status =
+            "已提交到系统队列（是否出纸以队列/打印机为准）";
         } catch (e) {
           job.row.status = "失败：" + printError(e);
         }

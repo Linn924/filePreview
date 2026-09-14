@@ -113,7 +113,13 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         pageCount.value = pages.length;
         scroller = pane.value?.querySelector(".document-scroll") as HTMLElement;
         scroller?.addEventListener("scroll", syncPage, { passive: true });
-        cleanupResize = attachTableResize(shadow);
+        cleanupResize = attachTableResize(shadow, {
+          initial: props.file.view?.word?.widths,
+          onChange: (widths) => {
+            props.file.view ??= { zoom: props.zoom, scroll: [] };
+            props.file.view.word = { widths };
+          },
+        });
         resize = new ResizeObserver(fit);
         resize.observe(scroller);
         fit();

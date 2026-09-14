@@ -5,7 +5,22 @@ export interface PreviewFile {
   ext: string;
   bytes: Uint8Array;
   error: string;
-  view?: { zoom: number; scroll: Array<{ top: number; left: number }>; fit?: 'original' | 'width' | 'page'; encoding?: string; excel?: { sheet: string; columns: number; rows: number; widths: Record<string, number> } };
+  view?: {
+    zoom: number;
+    scroll: Array<{ top: number; left: number }>;
+    fit?: "original" | "width" | "page";
+    encoding?: string;
+    /** PDF temporary rotation in degrees; does not modify the source file. */
+    rotate?: 0 | 90 | 180 | 270;
+    excel?: {
+      sheet: string;
+      columns: number;
+      rows: number;
+      widths: Record<string, number>;
+    };
+    /** Word temporary table column widths: `tableIndex:colIndex` → px. */
+    word?: { widths: Record<string, number> };
+  };
 }
 export type Theme = "light" | "dark" | "system";
 export type PrintEntry = "all" | "current" | "none";
@@ -86,6 +101,7 @@ export interface DesktopBridge {
   arrangePrintWindows():Promise<void>;
   printPanelBusy(value:boolean):void;
   printers(): Promise<import("./printing").Printer[]>;
+  openPrintQueue(): Promise<string>;
   dropPrintPdfs(files:File[]):Promise<PreviewFile[]>;
   selectPrintPdfs(): Promise<PreviewFile[]>;
   printPdf(job: import("./printing").PdfPrintJob): Promise<string>;

@@ -67,6 +67,11 @@ const suite: Suite = async (c) => {
     "document.querySelector('.word-host').shadowRoot.querySelectorAll('section.docx').length===2",
   );
   await checkContinuous(c, pages, ".document-scroll");
+  await c.check(
+    pages,
+    "Word table resize handles present",
+    "document.querySelector('.word-host').shadowRoot.querySelectorAll('.column-resize-handle').length>0",
+  );
   c.close(pages);
 };
 export default suite;

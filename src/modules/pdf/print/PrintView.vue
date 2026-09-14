@@ -2,7 +2,12 @@
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { getDocument, GlobalWorkerOptions, type RenderTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { paperSize, selectedPages } from "../../../../shared/printing";
+import {
+  paperSize,
+  selectedPages,
+  applyPageOrder,
+  printScaleFactor,
+} from "../../../../shared/printing";
 const host = ref<HTMLElement>();
 let disposed = false;
 let task: RenderTask | undefined;
@@ -21,7 +26,9 @@ onMounted(async () => {
       useSystemFonts: true,
     });
     const pdf = await loading.promise;
-    const selected = selectedPages(job.options.range, pdf.numPages);
+    const ranged = selectedPages(job.options.range, pdf.numPages);
+    const selected = applyPageOrder(ranged, job.options.pageOrder || "forward");
+    if (!selected.length) throw Error("按当前页码范围与页序没有可打印的页。");
     const paper = paperSize(job.options);
     const style = document.createElement("style");
     style.textContent = `@page{size:${paper.width}mm ${paper.height}mm;margin:0}html,body,#app{margin:0;padding:0;background:white;color:black;color-scheme:light}.print-sheet{box-sizing:border-box;width:${paper.width}mm;height:${paper.height}mm;padding:10mm;break-after:page;display:flex;align-items:center;justify-content:center;overflow:hidden}.print-sheet:last-child{break-after:auto}.print-sheet canvas{max-width:100%;max-height:100%;object-fit:contain}`;
@@ -31,9 +38,10 @@ onMounted(async () => {
       if (disposed) return;
       const page = await pdf.getPage(index);
       const original = page.getViewport({ scale: 1 });
-      const fit = Math.min(
-        ((paper.width - 20) * 72) / 25.4 / original.width,
-        ((paper.height - 20) * 72) / 25.4 / original.height,
+      const fit = printScaleFactor(
+        original,
+        paper,
+        job.options.scale || "fit",
       );
       const viewport = page.getViewport({ scale: (fit * 150) / 72 });
       pixels += Math.ceil(viewport.width) * Math.ceil(viewport.height);
