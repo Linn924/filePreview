@@ -29,16 +29,21 @@
 }
 
 .pdf-page {
+  position: relative;
   margin: 0 auto 24px;
   background: white;
   flex-shrink: 0;
+  overflow: hidden;
 }
 .pdf-page canvas {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 .pdf-toolbar-row {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -48,18 +53,22 @@
   flex-shrink: 0;
 }
 .pdf-body {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 1;
   min-height: 0;
 }
 .pdf-body .pdf-scroll {
   flex: 1;
+  min-width: 0;
 }
 .pdf-search {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 .pdf-search-bar {
   display: flex;
@@ -90,18 +99,27 @@
 .pdf-page.is-active-hit {
   box-shadow: 0 0 0 3px #409eff88;
 }
+/* Text layer must stay inside the page box and never cover chrome UI. */
 .pdf-text-layer {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   line-height: 1;
   opacity: 0;
   pointer-events: none;
+  z-index: 2;
 }
 .pdf-text-layer.enabled {
+  /* Keep selection possible without swallowing toolbar clicks outside the page. */
   opacity: 0.01;
   pointer-events: auto;
   user-select: text;
+  cursor: text;
 }
 .pdf-text-layer span {
   position: absolute;
@@ -111,20 +129,24 @@
   cursor: text;
 }
 .pdf-nav {
-  width: 160px;
+  position: relative;
+  z-index: 3;
+  width: 168px;
   flex-shrink: 0;
   border-right: 1px solid var(--line);
   background: var(--panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-height: 100%;
   overflow: hidden;
 }
 .pdf-nav-tabs {
   display: flex;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
-.pdf-nav-tabs button {
+.pdf-nav-tabs .pdf-nav-tab {
   flex: 1;
   padding: 8px 4px;
   font-size: 12px;
@@ -133,7 +155,7 @@
   color: var(--muted);
   cursor: pointer;
 }
-.pdf-nav-tabs button.active {
+.pdf-nav-tabs .pdf-nav-tab.active {
   color: var(--text);
   font-weight: 600;
   box-shadow: inset 0 -2px 0 var(--accent);
@@ -184,14 +206,20 @@
   border-radius: 8px;
   background: var(--well);
   cursor: pointer;
+  box-sizing: border-box;
 }
 .thumb.current {
   border-color: var(--accent);
 }
 .thumb canvas {
-  background: white;
+  display: block;
+  background: #fff;
   box-shadow: 0 1px 4px #0002;
   max-width: 100%;
+  height: auto;
+}
+.thumb:not(.thumb-painted) canvas {
+  background: linear-gradient(180deg, #f3f4f6, #e5e7eb);
 }
 .thumb span {
   font-size: 11px;

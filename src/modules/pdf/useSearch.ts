@@ -21,11 +21,13 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     if (!doc) return "";
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
-    text = content.items
+    const parts = content.items
       .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
+      .filter(Boolean);
+    // Keep both spaced and compact forms so CJK and Latin invoices match.
+    text = [parts.join(" "), parts.join("")]
+    .map((s) => s.replace(/\s+/g, " ").trim())
+    .join("\n");
     cache.set(n, text);
     return text;
   }

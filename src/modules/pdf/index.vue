@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import type { PreviewProps } from "../types";
 import { usePreview } from "./usePreview";
 import { usePdfSearch } from "./useSearch";
@@ -44,61 +44,87 @@ function buildTextLayer(pageEl: HTMLElement, index: number) {
   const layer = pageEl.querySelector(".pdf-text-layer") as HTMLElement | null;
   if (!layer || layer.dataset.built === "1") return;
   void (async () => {
-    const page = await doc.getPage(index + 1);
-    const viewport = page.getViewport({
-      scale:
-        (parseFloat(pageEl.style.width) || pageEl.clientWidth) /
-        page.getViewport({ scale: 1 }).width,
-    });
-    const content = await page.getTextContent();
-    layer.replaceChildren();
-    for (const item of content.items) {
-      if (!("str" in item) || !item.str) continue;
-      const span = document.createElement("span");
-      span.textContent = item.str;
-      const tx = item.transform;
-      const style = span.style;
-      style.left = tx[4] + "px";
-      style.top = tx[5] - (item.height || 12) + "px";
-      style.fontSize = (item.height || Math.hypot(tx[1], tx[3]) || 12) + "px";
-      style.height = (item.height || 12) + "px";
-      layer.append(span);
+    try {
+      const page = await doc.getPage(index + 1);
+      const content = await page.getTextContent();
+      const cssW = pageEl.clientWidth || parseFloat(pageEl.style.width) || 1;
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: cssW / (base.width || 1) });
+      layer.replaceChildren();
+      const items = content.items as Array<{
+        str?: string;
+        transform: number[];
+        width?: number;
+        height?: number;
+      }>;
+      for (const item of items) {
+        if (!item.str) continue;
+        // Map PDF text matrix into the page viewport (css pixels).
+        const tx = item.transform;
+        const [x, y] = viewport.convertToViewportPoint(tx[4], tx[5]);
+        const fontH = Math.hypot(tx[2], tx[3]) * viewport.scale || 12;
+        const span = document.createElement("span");
+        span.textContent = item.str;
+        const style = span.style;
+        style.left = x + "px";
+        style.top = y - fontH + "px";
+        style.fontSize = fontH + "px";
+        if (item.width) style.width = item.width * viewport.scale + "px";
+        layer.append(span);
+      }
+      layer.dataset.built = "1";
+    } catch {
+      layer.dataset.built = "";
     }
-    layer.dataset.built = "1";
-    void viewport;
   })();
 }
+watch(searchOpen, async (open) => {
+  if (!open) return;
+  await nextTick();
+  for (const el of scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") ||
+    []) {
+    const i = Number(el.dataset.page);
+    if (Number.isFinite(i)) buildTextLayer(el, i);
+  }
+});
 watch(
-  [scroll, pages, () => props.zoom, searchOpen],
-  async () => {
+  () => props.zoom,
+  () => {
     if (!searchOpen.value) return;
-    const { nextTick } = await import("vue");
-    await nextTick();
     for (const el of scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") ||
       []) {
-      const i = Number(el.dataset.page);
-      if (Number.isFinite(i)) buildTextLayer(el, i);
+      const layer = el.querySelector(".pdf-text-layer") as HTMLElement | null;
+      if (layer) layer.dataset.built = "";
     }
+    void nextTick().then(() => {
+      for (const el of scroll.value?.querySelectorAll<HTMLElement>(
+        ".pdf-page",
+      ) || []) {
+        const i = Number(el.dataset.page);
+        if (Number.isFinite(i)) buildTextLayer(el, i);
+      }
+    });
   },
-  { deep: false },
 );
 </script>
 <template>
   <section class="pdf-pane">
-    <div class="pdf-toolbar-row">
+    <div class="pdf-toolbar-row" data-pdf-toolbar>
       <PdfSearch
         v-model:open="searchOpen"
-        v-model:query="search.query.value"
+        :query="search.query.value"
         :hits="search.hits.value"
         :active="search.active.value"
         :searching="search.searching.value"
         :error="search.error.value"
+        @update:query="(v) => (search.query.value = v)"
         @search="runSearch"
         @next="search.next()"
         @prev="search.prev()"
         @clear="search.clear()"
       />
       <button
+        type="button"
         class="pdf-nav-toggle"
         :aria-pressed="navOpen"
         @click="navOpen = !navOpen"
