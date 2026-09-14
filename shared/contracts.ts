@@ -100,6 +100,8 @@ export interface DesktopBridge {
   onExport(handler: (id: string) => void): () => void;
   onRemove(handler: (id: string) => void): () => void;
   select(): Promise<void>;
+  /** Open dialog and append selected files as tabs in the current preview window. */
+  addPreviewFiles(): Promise<PreviewFile[]>;
   drop(files: File[]): Promise<void>;
   consume(): Promise<PreviewFile[]>;
   close(): void;

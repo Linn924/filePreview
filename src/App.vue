@@ -66,6 +66,24 @@ async function select() {
     error.value = String(e);
   }
 }
+async function openFiles() {
+  try {
+    error.value = "";
+    if (isPreview) {
+      const added = await window.localPreview.addPreviewFiles();
+      if (!added.length) return;
+      const known = new Set(files.value.map((f) => f.id));
+      const fresh = added.filter((f) => !known.has(f.id));
+      if (!fresh.length) return;
+      files.value = [...files.value, ...fresh];
+      active.value = fresh[fresh.length - 1].id;
+    } else {
+      await select();
+    }
+  } catch (e) {
+    error.value = String(e);
+  }
+}
 async function drop(event: DragEvent) {
   dragging.value = false;
   dragDepth = 0;
@@ -119,7 +137,7 @@ async function save(value: Partial<Settings>) {
 function key(event: KeyboardEvent) {
   if (event.ctrlKey && event.key.toLowerCase() === "o") {
     event.preventDefault();
-    void select();
+    void openFiles();
   }
   if (event.key === "Escape") showSettings.value = false;
 }
@@ -212,6 +230,15 @@ onBeforeUnmount(() => {
             ×
           </button>
         </div>
+        <button
+          type="button"
+          class="tab-add-file"
+          title="打开文件（Ctrl+O）"
+          aria-label="打开文件"
+          @click="openFiles"
+        >
+          + 打开
+        </button>
       </nav>
       <PreviewTab
         v-for="file in files"

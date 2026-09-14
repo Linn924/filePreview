@@ -260,6 +260,26 @@ export const ready = owner
           : dialog.showOpenDialog(options));
         if (!result.canceled) await enqueue(result.filePaths);
       });
+      ipcMain.handle("preview:add", async (event) => {
+        trusted(event);
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win || !event.sender.getURL().includes("?preview=1"))
+          throw Error("请在预览窗口中添加文件。");
+        const result = await dialog.showOpenDialog(win, {
+          title: "打开文件",
+          properties: ["openFile", "multiSelections"],
+          filters: [
+            { name: "支持的文件", extensions },
+            { name: "所有文件", extensions: ["*"] },
+          ],
+        });
+        if (result.canceled || !result.filePaths.length) return [];
+        const files: PreviewFile[] = [];
+        for (const name of result.filePaths)
+          files.push(await readPreviewFile(name));
+        registerFiles(event.sender.id, files);
+        return files;
+      });
       ipcMain.handle("preview:drop", async (event, paths: unknown) => {
         trusted(event);
         if (

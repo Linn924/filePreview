@@ -38,6 +38,7 @@ const bridge: DesktopBridge = {
     return () => ipcRenderer.removeListener("tabs:remove", listener);
   },
   select: () => ipcRenderer.invoke("preview:select"),
+  addPreviewFiles: () => ipcRenderer.invoke("preview:add"),
   drop: (files) =>
     ipcRenderer.invoke(
       "preview:drop",

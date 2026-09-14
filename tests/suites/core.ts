@@ -77,6 +77,19 @@ const suite: Suite = async (c) => {
     "tab close releases component",
     "document.querySelectorAll('.preview-tab').length===1",
   );
+  // Preview chrome: + 打开 appends another file as a tab in the same window.
+  const realOpen = dialog.showOpenDialog;
+  dialog.showOpenDialog = (async () => ({
+    canceled: false,
+    filePaths: [c.fixture("document.pdf")],
+  })) as typeof dialog.showOpenDialog;
+  await c.click(tabs, ".tab-add-file");
+  await c.check(
+    tabs,
+    "preview add-file button appends tab",
+    "document.querySelectorAll('.tab').length===2 && document.body.textContent.includes('document.pdf')",
+  );
+  dialog.showOpenDialog = realOpen;
   c.close(tabs);
   const again = await c.program.openPaths([
     c.fixture("text.txt"),

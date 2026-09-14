@@ -518,6 +518,25 @@ button:hover {
   flex-shrink: 0;
   padding-left: 6px;
 }
+.tab-add-file {
+  flex-shrink: 0;
+  align-self: stretch;
+  margin-left: 4px;
+  padding: 0 12px;
+  border: 1px dashed var(--line);
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab-add-file:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  border-style: solid;
+}
 .page-nav,
 .pane-footer {
   background: var(--panel);
@@ -623,8 +642,14 @@ button:hover {
 
 /* Fullscreen keeps the content mounted; controls reveal at screen edges. */
 .immersive .app-header,
-.immersive .tabs {
+.immersive .tabs,
+.immersive .pdf-toolbar-row,
+.immersive .pdf-nav {
   display: none;
+}
+.immersive .pdf-pane,
+.immersive .pdf-body {
+  min-height: 0;
 }
 .immersive .filebar {
   position: fixed;
