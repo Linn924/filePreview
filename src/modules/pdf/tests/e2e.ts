@@ -143,6 +143,44 @@ const suite: Suite = async (c) => {
     "thumbnail canvas has non-zero size after paint",
     `[...document.querySelectorAll('.thumb canvas')].some(c=>c.width>0&&c.height>0)`,
   );
+  // Switch outline <-> thumbs several times: canvases must stay painted (no blank).
+  for (let i = 0; i < 4; i++) {
+    await c.click(searchWin, ".pdf-nav-tab", "目录");
+    await c.pause(100);
+    await c.click(searchWin, ".pdf-nav-tab", "缩略图");
+    await c.pause(180);
+  }
+  await c.check(
+    searchWin,
+    "thumbnails stay painted after tab switches",
+    `(()=>{const cs=[...document.querySelectorAll('.thumb canvas')];return cs.length===2&&cs.every(c=>c.width>0&&c.height>0&&c.closest('.thumb')?.classList.contains('thumb-painted'))})()`,
+  );
+  await c.check(
+    searchWin,
+    "thumb aspect matches main page aspect",
+    `(()=>{
+      const main=document.querySelector('.pdf-page');
+      const thumb=document.querySelector('.thumb canvas');
+      if(!main||!thumb||!thumb.width) return false;
+      const mw=parseFloat(main.style.width), mh=parseFloat(main.style.height);
+      const tr=thumb.width/thumb.height, mr=mw/mh;
+      return Math.abs(tr-mr)<0.08;
+    })()`,
+  );
+  // Sample center pixel is not empty/transparent (content was drawn).
+  await c.check(
+    searchWin,
+    "thumbnail bitmap has non-blank pixels",
+    `(()=>{
+      const c=document.querySelector('.thumb canvas');
+      if(!c||!c.width) return false;
+      const ctx=c.getContext('2d');
+      if(!ctx) return false;
+      const d=ctx.getImageData(Math.floor(c.width/2), Math.floor(c.height/2), 1, 1).data;
+      // Not fully transparent; allow white paper but reject empty black/zero alpha only.
+      return d[3]===255;
+    })()`,
+  );
   await c.check(
     searchWin,
     "toolbar still clickable after nav open",
