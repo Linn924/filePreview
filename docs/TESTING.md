@@ -28,6 +28,17 @@ PDF 搜索/导航与 Excel 虚拟滚动：`npm test -- --suite pdf,excel`。pdf 
 
 性能基准（不计入 all）：`npm run bench`（pdfjs/xlsx 库级）与 `npm test -- --suite bench`（Electron 打开→ready 中位数写入 outputs/bench/）。
 
+长 PDF DOM：模块测试断言 `.pdf-page` 数量有界（虚拟化占位 + 上下 pad），跳转末页仍可绘制；不再要求 80 个页节点同时在 DOM。
+
+安装/卸载验收（不连打印机）：
+```powershell
+npm run build:win
+npm run verify:install
+# 卸载后：
+npm run verify:install -- --expect-absent
+```
+Open With 仍按 TESTING 手工步骤在资源管理器验证；自动化只查安装目录与可选注册表。
+
 打印手工验收：在有打印机的测试机选择 A4/A5、横纵向、黑白/彩色、单面/双面及不同份数，确认驱动支持与实际出纸；检查多 PDF 顺序、失败后继续、停止后续任务、无打印机提示。已提交任务的取消在 Windows 队列验证。“已提交”不是实际出纸成功。超大文档需检查内存上限提示和按页码分批。安装包内打印资源也应进行同样的布局测试。
 
 仅修改缩放输入提交时，可运行 `npm test -- --suite zoom`。该套件在真实文本预览窗口依次触发 input → Enter / blur，检查输入值和实际文字字号同时变化；覆盖回车、失焦、连续提交、25–400 边界、空值回退和小数取整。不能只设置 value 后触发 change，否则会漏掉数字输入的类型转换问题。修改格式渲染或缩放计算时仍按下方影响矩阵测试。

@@ -1,5 +1,6 @@
 import { fitScale } from "../../composables/fit";
 import { previewError } from '../../../shared/previewError';
+import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import { attachTableResize } from "../../composables/resizeTable";
 import type { PreviewFile } from "../../types";
@@ -120,7 +121,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
             props.file.view.word = { widths };
           },
         });
-        resize = new ResizeObserver(fit);
+        resize = createSafeResizeObserver(fit);
         resize.observe(scroller);
         fit();
         emit("ready");

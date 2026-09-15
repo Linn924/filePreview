@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { previewError } from '../../../shared/previewError';
 import { fitScale } from "../../composables/fit";
+import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import type { PreviewProps } from "../types";
 import { openSlides, type SlidesRenderer } from "./renderer";
@@ -80,7 +81,7 @@ onMounted(async () => {
       fit();
       await nextTick();
     }
-    observer = new ResizeObserver(fit);
+    observer = createSafeResizeObserver(fit);
     observer.observe(viewport.value!);
     fit();
     emit("ready");

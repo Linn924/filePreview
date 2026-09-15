@@ -1,4 +1,5 @@
 import { fitScale } from "../../composables/fit";
+import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import DOMPurify from "dompurify";
 import type { PreviewProps, PreviewEmit } from "../types";
@@ -29,18 +30,14 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const rotate = ref<0 | 90 | 180 | 270>(0);
   const originalPixels = ref(false);
   let observer: ResizeObserver | undefined;
-  let frame = 0;
   onMounted(() => {
     const surface = pane.value?.querySelector(".image");
     if (!surface) return;
-    observer = new ResizeObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        available.value = {
-          width: surface.clientWidth - 50,
-          height: surface.clientHeight - 50,
-        };
-      });
+    observer = createSafeResizeObserver(() => {
+      available.value = {
+        width: surface.clientWidth - 50,
+        height: surface.clientHeight - 50,
+      };
     });
     observer.observe(surface);
   });
@@ -93,7 +90,6 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   });
   onBeforeUnmount(() => {
     observer?.disconnect();
-    cancelAnimationFrame(frame);
     URL.revokeObjectURL(url);
   });
 

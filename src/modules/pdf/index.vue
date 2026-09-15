@@ -19,6 +19,9 @@ const {
   sync,
   jump,
   dimensions,
+  visiblePages,
+  padTop,
+  padBottom,
   pdf,
   needPassword,
   passwordError,
@@ -106,6 +109,15 @@ watch(searchOpen, async (open) => {
     if (Number.isFinite(i)) buildTextLayer(el, i);
   }
 });
+watch([visiblePages, searchOpen], async () => {
+  if (!searchOpen.value) return;
+  await nextTick();
+  for (const el of scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") ||
+    []) {
+    const i = Number(el.dataset.page);
+    if (Number.isFinite(i)) buildTextLayer(el, i);
+  }
+});
 watch(
   () => props.zoom,
   () => {
@@ -184,8 +196,9 @@ watch(
         @jump="jump"
       />
       <div ref="scroll" class="pdf-scroll" @scroll.passive="sync">
+        <div v-if="padTop > 0" class="pdf-virtual-pad" :style="{ height: padTop + 'px' }" aria-hidden="true"></div>
         <div
-          v-for="(page, index) in pages"
+          v-for="index in visiblePages"
           :key="index"
           class="pdf-page preview-content"
           :class="{
@@ -202,6 +215,7 @@ watch(
             aria-hidden="true"
           ></div>
         </div>
+        <div v-if="padBottom > 0" class="pdf-virtual-pad" :style="{ height: padBottom + 'px' }" aria-hidden="true"></div>
       </div>
     </div>
     <PageNavigation

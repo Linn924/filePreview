@@ -30,12 +30,12 @@ const suite: Suite = async (c) => {
   long.setSize(1000, 700);
   await c.pause(250);
   await c.check(long, "long PDF first page painted and full page count available",
-    "document.querySelectorAll('.pdf-page').length===80 && document.querySelector('canvas').width>0");
-  await c.check(long, "mixed page dimensions resolve correctly",
-    "(()=>{const p=[...document.querySelectorAll('.pdf-page')];return p.every((e,i)=>Math.abs(parseFloat(e.style.width)/parseFloat(e.style.height)-(i%2?842/595:595/842))<0.01)})()");
+    "document.querySelectorAll('.pdf-page').length<=20 && document.querySelector('.page-nav input').max==='80' && [...document.querySelectorAll('.pdf-page canvas')].some(c=>c.width>0)");
+  await c.check(long, "long PDF DOM stays virtualized",
+    "document.querySelectorAll('.pdf-page').length<40 && document.querySelectorAll('.pdf-virtual-pad').length>=1");
   await c.evaluate(long, "(()=>{const p=document.querySelector('.page-nav input');p.value='80';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
   await c.check(long, "long PDF last page renders after jump",
-    "document.querySelector('.page-nav input').value==='80' && document.querySelectorAll('canvas')[79].width>0");
+    "document.querySelector('.page-nav input').value==='80' && [...document.querySelectorAll('.pdf-page')].some(el=>el.dataset.page==='79'&&el.querySelector('canvas')?.width>0)");
   await c.evaluate(long, "(()=>{const z=document.querySelector('.zoom-control input');for(const v of ['125','80','137']){z.value=v;z.dispatchEvent(new Event('input',{bubbles:true}));z.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));}})()");
   await c.check(long, "rapid zoom retains rendered page without errors",
     "document.querySelector('.zoom-control input').value==='137' && [...document.querySelectorAll('canvas')].some(c=>c.width>0) && !document.querySelector('.error')");

@@ -66,13 +66,33 @@ const suite: Suite = async (c) => {
     };
   };
   app.on("web-contents-created", intercept);
+  async function waitPrintPanel(): Promise<BrowserWindow> {
+    for (let i = 0; i < 50; i++) {
+      const w = BrowserWindow.getAllWindows().find(
+        (x) =>
+          !x.isDestroyed() &&
+          !x.isModal() &&
+          x.webContents.getURL().includes("print-panel=1"),
+      );
+      if (w) return w;
+      await c.pause(40);
+    }
+    throw Error("Print panel did not open in time");
+  }
+  async function closePrintPanels() {
+    for (const w of BrowserWindow.getAllWindows())
+      if (
+        !w.isDestroyed() &&
+        w.webContents.getURL().includes("print-panel=1")
+      )
+        c.close(w);
+    await c.pause(120);
+  }
   try {
     c.program.updateSettings({ printEntry: "current", multiFileMode: "windows" });
     const preview = await c.open("document.pdf");
     await c.click(preview, ".pdf-print-button");
-    const win = BrowserWindow.getAllWindows().find((w) =>
-      w.webContents.getURL().includes("print-panel=1"),
-    )!;
+    const win = await waitPrintPanel();
     await c.check(
       win,
       "printEntry current adds only the active PDF",
@@ -333,10 +353,7 @@ const suite: Suite = async (c) => {
     await c.pause(300);
     await c.click(noneWin, ".pdf-print-button");
     await c.pause(400);
-    const panelNone = BrowserWindow.getAllWindows().find((w) =>
-      w.webContents.getURL().includes("print-panel=1"),
-    );
-    if (!panelNone) throw Error("printEntry none did not open panel");
+    const panelNone = await waitPrintPanel();
     await c.check(
       panelNone,
       "printEntry none opens without auto-adding files",
@@ -344,7 +361,7 @@ const suite: Suite = async (c) => {
     );
     c.close(panelNone);
     c.close(noneWin);
-    await c.pause(300);
+    await closePrintPanels();
     c.program.updateSettings({ printEntry: "all" });
   } finally {
     app.removeListener("web-contents-created", intercept);
