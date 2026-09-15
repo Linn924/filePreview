@@ -75,19 +75,15 @@ const printers = ref<Printer[]>([]),
 const capabilities = computed(() => {
   const p = printers.value.find((x) => x.name === deviceName.value);
   const blob = `${p?.description || ""} ${p?.status || ""} ${p?.displayName || ""}`.toLowerCase();
-  const hasDuplex =
+  const duplex =
     /duplex|双面|long.?edge|short.?edge/.test(blob) ||
     /pdf|virtual|虚拟/.test(p?.name?.toLowerCase() || "");
-  const hasColor =
+  const color =
     !/mono|黑白|black.?only/.test(blob) &&
-    (blob.includes("color") || /pdf|virtual|虚拟/.test(p?.name?.toLowerCase() || "") || !blob);
-  return {
-    duplex: hasDuplex,
-    color: hasColor,
-    note: !/duplex|双面/.test(blob)
-      ? "驱动未声明双面，单面通常可用"
-      : "驱动可能支持双面",
-  };
+    (blob.includes("color") ||
+      /pdf|virtual|虚拟/.test(p?.name?.toLowerCase() || "") ||
+      !blob);
+  return { duplex, color };
 });
 
 onMounted(async () => {
@@ -136,14 +132,11 @@ const orderLabel = (o?: string) =>
       aria-label="PDF 打印"
     >
       <header class="print-top">
-        <div>
-          <h2>打印</h2>
-          <p class="print-sub">PDF · 图片 · DOCX · 按列表顺序提交到系统队列</p>
-        </div>
+        <h2>打印</h2>
         <div class="print-top-actions">
           <button type="button" @click="arrange">并排查看</button>
           <button type="button" class="open-print-queue" @click="openQueue">
-            系统打印机/队列
+            系统打印机
           </button>
         </div>
       </header>
@@ -165,20 +158,16 @@ const orderLabel = (o?: string) =>
         <div class="capability-chips" aria-label="打印机能力提示">
           <span class="chip" :class="{ on: capabilities.color }">彩色</span>
           <span class="chip" :class="{ on: capabilities.duplex }">双面</span>
-          <span class="chip muted">{{ capabilities.note }}</span>
         </div>
       </div>
 
       <p v-if="!printers.length" class="print-empty-warn">
-        未找到打印机，请先在 Windows 中添加打印机或使用“导出为 PDF”类虚拟打印机。
+        未找到打印机。可在 Windows 中添加，或使用「导出为 PDF」类虚拟打印机。
       </p>
       <p v-if="queueNote" class="queue-note" role="status">{{ queueNote }}</p>
-      <p v-else class="queue-hint">
-        选好纸张后点右下角「打印所选文件」。提交成功 ≠ 已出纸，可在「系统打印机/队列」查看。
-      </p>
 
       <div v-if="!files.length" class="print-dropzone">
-        <p>把 PDF / 图片 / DOCX 拖到这里</p>
+        <p>拖入文件，或</p>
         <button type="button" class="primary" @click="choose">添加文件</button>
       </div>
 
@@ -214,26 +203,22 @@ const orderLabel = (o?: string) =>
             </button>
           </div>
           <div class="print-file-summary">
-            <span class="summary-chip">{{ row.options.paper }}</span>
-            <span class="summary-chip">{{
-              row.options.landscape ? "横向" : "纵向"
-            }}</span>
-            <span class="summary-chip">{{ row.options.copies }} 份</span>
-            <span class="summary-chip">{{
-              row.options.range || "全部页"
-            }}</span>
-            <span class="summary-chip">{{ scaleLabel(row.options.scale) }}</span>
-            <span
-              v-if="row.options.pageOrder && row.options.pageOrder !== 'forward'"
-              class="summary-chip"
-              >{{ orderLabel(row.options.pageOrder) }}</span
-            >
+            <span class="summary-line">
+              {{ row.options.paper }}
+              {{ row.options.landscape ? "横向" : "纵向" }} ·
+              {{ row.options.copies }} 份 ·
+              {{ row.options.range || "全部页" }}
+              {{ scaleLabel(row.options.scale) }}
+              <template v-if="row.options.pageOrder && row.options.pageOrder !== 'forward'">
+                · {{ orderLabel(row.options.pageOrder) }}
+              </template>
+            </span>
             <button
               class="toggle-print-options"
               :aria-expanded="row.expanded"
               @click="row.expanded = !row.expanded"
             >
-              {{ row.expanded ? "收起设置" : "详细设置" }}
+              {{ row.expanded ? "收起" : "设置" }}
             </button>
           </div>
           <div class="print-file-body">
@@ -251,9 +236,6 @@ const orderLabel = (o?: string) =>
                 :model-value="row.options"
                 :busy="busy"
               />
-              <p v-else class="options-collapsed-hint">
-                展开「详细设置」可改纸张、方向、份数、缩放、页序与页码。
-              </p>
             </div>
           </div>
           <div class="print-file-bottom">
@@ -271,9 +253,10 @@ const orderLabel = (o?: string) =>
 
       <p v-if="error" role="alert">{{ error }}</p>
       <footer class="print-footer">
+        <span class="print-foot-note">提交后进入系统队列，是否出纸以队列为准</span>
         <button type="button" :disabled="busy" @click="choose">添加文件</button>
         <button v-if="busy" type="button" @click="stop = true" :disabled="stop">
-          {{ stop ? "将在当前任务后停止" : "停止后续任务" }}
+          {{ stop ? "将停止" : "停止后续任务" }}
         </button>
         <button
           v-else

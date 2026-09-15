@@ -28,7 +28,7 @@ const scaleLabel = computed(
 );
 const label = computed(
   () =>
-    `排版示意：${scaleLabel.value} · ${props.options.paper}${props.options.landscape ? " 横向" : " 纵向"} · 页序 ${props.options.pageOrder || "forward"} · 约 10mm 边距`,
+    `${props.options.paper}${props.options.landscape ? " 横" : " 纵"} · ${scaleLabel.value}`,
 );
 
 async function draw() {
@@ -88,6 +88,6 @@ onBeforeUnmount(() => {
       <canvas ref="canvas"></canvas>
     </div>
     <small v-if="error" class="paper-layout-error">{{ error }}</small>
-    <small v-else>{{ label }} · 实际出纸以打印驱动为准</small>
+    <small v-else class="paper-caption">{{ label }}</small>
   </div>
 </template>

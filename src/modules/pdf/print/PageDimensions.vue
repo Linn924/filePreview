@@ -78,12 +78,10 @@ onBeforeUnmount(() => {
   <div class="page-dims">
     <p class="paper-dimensions">
       <template v-if="pages.length">
-        共 {{ pages.length }}<template v-if="pages.length >= 40">+</template>
-        页 · 目标纸张 {{ options.paper }}：{{ paper.width }} ×
-        {{ paper.height }} mm
+        {{ pages.length }}<template v-if="pages.length >= 40">+</template> 页 ·
+        {{ options.paper }} {{ paper.width }} × {{ paper.height }} mm
       </template>
-      <template v-else>{{ error || "读取页面尺寸…" }}</template>
-      <small>混合尺寸按各页原尺寸等比打印；屏幕缩放≠纸张大小。</small>
+      <template v-else>{{ error || "读取尺寸…" }}</template>
     </p>
     <div v-if="summary.length" class="page-size-list">
       <div
@@ -92,14 +90,8 @@ onBeforeUnmount(() => {
         class="page-size-row"
         :class="{ active: activePages.includes(p.n) }"
       >
-        <span class="page-n">p.{{ p.n }}</span>
-        <span
-          >{{ p.w.toFixed(0) }}×{{ p.h.toFixed(0) }} mm
-          {{ p.landscape ? "横" : "纵" }}</span
-        >
-        <span class="page-fit-hint">{{
-          p.landscape === options.landscape ? "方向一致" : "方向不同，将等比适配"
-        }}</span>
+        <span class="page-n">{{ p.n }}</span>
+        <span>{{ p.w.toFixed(0) }}×{{ p.h.toFixed(0) }} {{ p.landscape ? "横" : "纵" }}</span>
       </div>
       <button
         v-if="moreCount > 0 && !showAll"
@@ -107,7 +99,7 @@ onBeforeUnmount(() => {
         class="page-size-more"
         @click="showAll = true"
       >
-        还有 {{ moreCount }} 页…
+        +{{ moreCount }}
       </button>
     </div>
   </div>
