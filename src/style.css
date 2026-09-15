@@ -491,6 +491,16 @@ button:hover {
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
   flex-shrink: 0;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scroll-padding-inline: 16px;
+}
+.tabs::-webkit-scrollbar {
+  height: 6px;
+}
+.tabs::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
 }
 .tab {
   display: flex;

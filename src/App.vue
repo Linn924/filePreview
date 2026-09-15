@@ -17,7 +17,34 @@ let draggedTab = "";
 const tabMime = "application/x-file-preview-tab";
 const cleanups: Array<() => void> = [];
 const mainEl = ref<HTMLElement>();
+const tabsNav = ref<HTMLElement>();
+/** Next active-tab scroll policy: center for wheel, nearest for click/close. */
+let tabAlignMode: "center" | "nearest" = "nearest";
 provide("previewFiles", files);
+async function alignActiveTab(mode: "center" | "nearest" = "nearest") {
+  await nextTick();
+  const bar = tabsNav.value;
+  if (!bar) return;
+  const tab = bar.querySelector<HTMLElement>(".tab.active");
+  if (!tab) return;
+  if (mode === "center") {
+    const left =
+      tab.offsetLeft + tab.offsetWidth / 2 - bar.clientWidth / 2;
+    bar.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    return;
+  }
+  const tabLeft = tab.offsetLeft;
+  const tabRight = tabLeft + tab.offsetWidth;
+  const viewLeft = bar.scrollLeft;
+  const viewRight = viewLeft + bar.clientWidth;
+  if (tabLeft < viewLeft + 8)
+    bar.scrollTo({ left: Math.max(0, tabLeft - 12), behavior: "smooth" });
+  else if (tabRight > viewRight - 8)
+    bar.scrollTo({
+      left: tabRight - bar.clientWidth + 12,
+      behavior: "smooth",
+    });
+}
 function startDrag(event: DragEvent, id: string) {
   draggedTab = id;
   event.dataTransfer?.setData(tabMime, id);
@@ -36,7 +63,9 @@ async function dropTab(event: DragEvent, before?: string) {
     const file = await window.localPreview.claim(id);
     files.value = [...files.value, file];
     active.value = id;
+    tabAlignMode = "center";
     await nextTick();
+    void alignActiveTab("center");
     try {
       await window.localPreview.accept(id);
     } catch (e) {
@@ -78,6 +107,8 @@ async function openFiles() {
       if (!fresh.length) return;
       files.value = [...files.value, ...fresh];
       active.value = fresh[fresh.length - 1].id;
+      tabAlignMode = "center";
+      void alignActiveTab("center");
     } else {
       await select();
     }
@@ -115,6 +146,8 @@ function closeTab(id: string) {
   if (active.value === id)
     active.value =
       files.value[Math.min(index, files.value.length - 1)]?.id || "";
+  tabAlignMode = "nearest";
+  void alignActiveTab("nearest");
   if (!files.value.length) window.localPreview.close();
 }
 function reorder(id: string) {
@@ -136,13 +169,17 @@ function switchBy(delta: number) {
   if (i < 0) return false;
   const next = i + delta;
   if (next < 0 || next >= files.value.length) return false;
+  tabAlignMode = "center";
   active.value = files.value[next].id;
   return true;
 }
-/** Wheel over tab bar cycles files. */
+/** Wheel over tab bar cycles files; strip centers the new active tab. */
 function onTabsWheel(event: WheelEvent) {
   if (files.value.length < 2) return;
-  const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+  const delta =
+    Math.abs(event.deltaY) >= Math.abs(event.deltaX)
+      ? event.deltaY
+      : event.deltaX;
   if (Math.abs(delta) < 8) return;
   event.preventDefault();
   switchBy(delta > 0 ? 1 : -1);
@@ -197,7 +234,7 @@ onMounted(async () => {
     applyTheme();
   });
   cleanups.push(window.localPreview.onRemove(closeTab));
-  cleanups.push(window.localPreview.onPreviewPrintFile(file=>{if(!files.value.some(f=>f.id===file.id))files.value=[...files.value,file];active.value=file.id;}));
+  cleanups.push(window.localPreview.onPreviewPrintFile(file=>{if(!files.value.some(f=>f.id===file.id))files.value=[...files.value,file];active.value=file.id;tabAlignMode="center";void alignActiveTab("center");}));
   cleanups.push(
     window.localPreview.onExport((id) => {
       const file = files.value.find((f) => f.id === id);
@@ -218,6 +255,7 @@ onMounted(async () => {
   if (isPreview) {
     files.value = await window.localPreview.consume();
     active.value = files.value[0]?.id || "";
+    void alignActiveTab("nearest");
     if (!files.value.length) error.value = "预览已释放，请重新打开文件。";
   }
 });
@@ -258,6 +296,7 @@ onBeforeUnmount(() => {
     <template v-else
       ><nav
         v-if="files.length"
+        ref="tabsNav"
         class="tabs"
         aria-label="文件标签"
         title="点击标签切换；在标签上滚动滚轮也可切换文件"
