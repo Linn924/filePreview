@@ -63,8 +63,11 @@
   position: sticky;
   left: 0;
 }
-:where(.excel) tbody tr:hover td {
-  background: #f6f9ff;
+/* Do not tint/unset cell fills on hover — that breaks Excel cell colors
+   and punches holes in dark theme. Indicate the row on the header only. */
+:where(.excel) tbody tr:hover > th:first-child,
+.spreadsheet tbody tr:hover > th:first-child {
+  background: #d9e4f7;
 }
 :where(.excel) footer {
   padding: 9px 15px;
@@ -129,9 +132,7 @@
   font-size: 11px;
   color: #7c889a;
 }
-.spreadsheet tbody tr:hover td {
-  background: unset;
-}
+/* Cells keep their fill (inline Excel style or white). No hover tint. */
 .spreadsheet td {
   background: white;
 }

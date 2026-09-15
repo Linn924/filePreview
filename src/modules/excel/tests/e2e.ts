@@ -75,6 +75,25 @@ const suite: Suite = async (c) => {
   );
   await c.click(win, ".sheets button", "季度报告");
   await c.snapshot(win, "excel");
+  // Dark theme: hover must not clear Excel cell fills.
+  c.program.updateSettings({ theme: "dark" });
+  await c.pause(200);
+  await c.check(
+    win,
+    "dark theme applied for excel",
+    "document.documentElement.dataset.theme==='dark'",
+  );
+  await c.check(
+    win,
+    "excel styled cell fill survives in dark theme",
+    "getComputedStyle(document.querySelector('td[colspan=\"4\"][rowspan=\"2\"]')).backgroundColor==='rgb(40, 90, 159)'",
+  );
+  await c.check(
+    win,
+    "excel default cell stays white not transparent",
+    "(()=>{const tds=[...document.querySelectorAll('tbody td')];const td=tds.find(el=>getComputedStyle(el).backgroundColor==='rgb(255, 255, 255)');return !!td})()",
+  );
+  c.program.updateSettings({ theme: "light" });
   c.close(win);
   for (const name of ["legacy.xls", "table.csv"]) {
     const w = await c.open(name);
