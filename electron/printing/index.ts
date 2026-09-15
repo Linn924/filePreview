@@ -14,7 +14,9 @@ interface ActiveJob {
 const jobs = new Map<number, ActiveJob>();
 let queue = Promise.resolve();
 export function setupPrinting(local: Session) {
-  ipcMain.handle("print:drop",async(event,paths:unknown)=>{trusted(event);if(!Array.isArray(paths)||paths.some(p=>typeof p!=="string"||!path.isAbsolute(p)||path.extname(p).toLowerCase()!==".pdf"))throw Error("请只拖入 PDF 文件。");const files=[];for(const name of paths)files.push(await readPreviewFile(name));return files;});
+  ipcMain.handle("print:drop",async(event,paths:unknown)=>{trusted(event);if(!Array.isArray(paths)||paths.some(p=>typeof p!=="string"||!path.isAbsolute(p)))throw Error("请只拖入本机文件。");
+    const allowed=new Set(["pdf","png","jpg","jpeg","webp","gif","bmp","svg","docx"]);
+    const files=[];for(const name of paths){const ext=path.extname(name).slice(1).toLowerCase();if(!allowed.has(ext))throw Error("支持 PDF、图片和 DOCX。");files.push(await readPreviewFile(name));}return files;});
   ipcMain.handle("print:printers", async (event) => {
     trusted(event);
     const list = await event.sender.getPrintersAsync();
@@ -46,9 +48,14 @@ export function setupPrinting(local: Session) {
     const result = await dialog.showOpenDialog(
       BrowserWindow.fromWebContents(event.sender)!,
       {
-        title: "选择要打印的 PDF",
+        title: "选择要打印的文件",
         properties: ["openFile", "multiSelections"],
-        filters: [{ name: "PDF", extensions: ["pdf"] }],
+        filters: [
+          { name: "可打印", extensions: ["pdf", "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "docx"] },
+          { name: "PDF", extensions: ["pdf"] },
+          { name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg"] },
+          { name: "Word", extensions: ["docx"] },
+        ],
       },
     );
     if (result.canceled) return [];
@@ -56,17 +63,19 @@ export function setupPrinting(local: Session) {
     for(const path of result.filePaths)files.push(await readPreviewFile(path));
     return files;
   });
+  const printable = new Set(["pdf", "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "docx"]);
   ipcMain.handle("print:submit", async (event, value: PdfPrintJob) => {
     trusted(event);
     const options = validatePrintOptions(value?.options);
     const file = value?.file;
     if (
       !file ||
-      file.ext !== "pdf" ||
+      !printable.has(file.ext) ||
       !(file.bytes instanceof Uint8Array) ||
-      file.bytes.length > 100 * 1024 * 1024 ||
-      new TextDecoder().decode(file.bytes.slice(0, 1024)).indexOf("%PDF-") < 0
+      file.bytes.length > 100 * 1024 * 1024
     )
+      throw Error("只支持有效的 PDF、图片或 DOCX 文件。");
+    if (file.ext === "pdf" && new TextDecoder().decode(file.bytes.slice(0, 1024)).indexOf("%PDF-") < 0)
       throw Error("只支持有效的 PDF 文件。");
     const printers = await event.sender.getPrintersAsync();
     if (!printers.some((p) => p.name === options.deviceName))

@@ -201,3 +201,43 @@
   border-color: var(--line);
   color: var(--muted);
 }
+.cell-locate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-left: auto;
+}
+.cell-locate-input {
+  width: 72px;
+  padding: 4px 6px;
+}
+.cell-locate small {
+  color: var(--muted);
+}
+.freeze-toggle {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.sheet-surface.freeze-row .spreadsheet thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.sheet-surface.freeze-row .spreadsheet tbody tr > th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+.sheet-surface.freeze-col .spreadsheet tbody tr > th:first-child,
+.sheet-surface.freeze-col .spreadsheet thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
+.sheet-surface.freeze-row.freeze-col .spreadsheet thead th:first-child {
+  z-index: 5;
+}

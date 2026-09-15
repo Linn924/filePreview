@@ -73,6 +73,21 @@ const suite: Suite = async (c) => {
     "all Excel columns reachable",
     "document.querySelector('table').textContent.includes('第105列')",
   );
+  await c.evaluate(
+    win,
+    "(()=>{const i=document.querySelector('.cell-locate-input');i.value='B12';i.dispatchEvent(new Event('input',{bubbles:true}))})()",
+  );
+  await c.click(win, ".cell-locate button", "跳转");
+  await c.check(
+    win,
+    "Excel locate cell B12",
+    "document.body.textContent.includes('已定位 B12')",
+  );
+  await c.check(
+    win,
+    "Excel freeze toggles present",
+    "document.querySelectorAll('.freeze-toggle input').length===2",
+  );
   await c.click(win, ".sheets button", "季度报告");
   await c.snapshot(win, "excel");
   // Dark theme: hover must not clear Excel cell fills.

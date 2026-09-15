@@ -37,6 +37,69 @@
   overflow: visible;
   white-space: pre-wrap;
 }
+.text-code {
+  padding: 12px 0;
+  font-family: Consolas, "Microsoft YaHei", monospace;
+  line-height: 1.65;
+}
+.text-line {
+  display: flex;
+  gap: 12px;
+  padding: 0 16px;
+}
+.text-line:hover {
+  background: #f7f9fc;
+}
+.line-no {
+  flex-shrink: 0;
+  width: 3.5em;
+  text-align: right;
+  color: #9aa6b8;
+  user-select: none;
+  font-size: 0.9em;
+}
+.line-body {
+  flex: 1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tok-key {
+  color: #0b5fff;
+}
+.tok-str {
+  color: #0a7a3e;
+}
+.tok-num {
+  color: #b45309;
+}
+.tok-kw {
+  color: #9333ea;
+}
+.text-hit {
+  background: #fde68a;
+  color: inherit;
+  border-radius: 2px;
+}
+.text-search-input {
+  width: 160px;
+  padding: 4px 8px;
+}
+.text-search-count {
+  color: var(--muted);
+}
+html[data-theme="dark"] .text-line:hover {
+  background: #1a2330;
+}
+html[data-theme="dark"] .tok-key {
+  color: #7eb6ff;
+}
+html[data-theme="dark"] .tok-str {
+  color: #6ee7a8;
+}
+html[data-theme="dark"] .text-hit {
+  background: #854d0e;
+  color: #fff;
+}
 .markdown {
   padding: 32px 48px;
   max-width: 1000px;

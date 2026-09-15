@@ -26,18 +26,20 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const dimensions = ref("");
   const natural = ref({ width: 0, height: 0 });
   const available = ref({ width: 0, height: 0 });
+  const rotate = ref<0 | 90 | 180 | 270>(0);
+  const originalPixels = ref(false);
   let observer: ResizeObserver | undefined;
-  let frame=0;
+  let frame = 0;
   onMounted(() => {
     const surface = pane.value?.querySelector(".image");
     if (!surface) return;
     observer = new ResizeObserver(() => {
       cancelAnimationFrame(frame);
-      frame=requestAnimationFrame(()=>{
-      available.value = {
-        width: surface.clientWidth - 50,
-        height: surface.clientHeight - 50,
-      };
+      frame = requestAnimationFrame(() => {
+        available.value = {
+          width: surface.clientWidth - 50,
+          height: surface.clientHeight - 50,
+        };
       });
     });
     observer.observe(surface);
@@ -48,8 +50,25 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     dimensions.value = `${img.naturalWidth} × ${img.naturalHeight}`;
     emit("ready");
   }
+  function cycleRotate() {
+    rotate.value = (((rotate.value + 90) % 360) as 0 | 90 | 180 | 270);
+  }
+  function toggleOriginal() {
+    originalPixels.value = !originalPixels.value;
+    if (originalPixels.value) emit("update:zoom", 100);
+  }
+  const fitLabel = computed(() =>
+    originalPixels.value ? "原始像素 100%" : "适合窗口",
+  );
   const style = computed(() => {
     const { width, height } = natural.value;
+    if (originalPixels.value)
+      return {
+        maxWidth: "none",
+        maxHeight: "none",
+        width: (width * props.zoom) / 100 + "px",
+        height: (height * props.zoom) / 100 + "px",
+      };
     const fit =
       width && height
         ? fitScale(
@@ -78,5 +97,16 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     URL.revokeObjectURL(url);
   });
 
-  return { pane, url, style, dimensions, loaded };
+  return {
+    pane,
+    url,
+    style,
+    dimensions,
+    loaded,
+    rotate,
+    cycleRotate,
+    originalPixels,
+    toggleOriginal,
+    fitLabel,
+  };
 }

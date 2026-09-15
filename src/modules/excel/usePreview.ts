@@ -136,6 +136,40 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     clientHeight.value = scroll.value?.clientHeight || 600;
     rowPage.value = page - 1;
   }
+  /** Jump to A1-style reference. Returns false if invalid. */
+  async function locateCell(refText: string) {
+    const m = String(refText || "")
+      .trim()
+      .toUpperCase()
+      .match(/^([A-Z]+)(\d+)$/);
+    if (!m) return false;
+    let col = 0;
+    for (const ch of m[1]) col = col * 26 + (ch.charCodeAt(0) - 64);
+    col -= 1;
+    const row = Number(m[2]) - 1;
+    if (row < 0 || col < 0 || row >= rowCount.value || col >= colCount.value)
+      return false;
+    colPage.value = Math.floor(col / pageCols);
+    loadedRowCount.value = Math.max(
+      loadedRowCount.value,
+      Math.min(rowCount.value, row + pageRows),
+    );
+    await nextTick();
+    const y = rowOffsets.value[row] || 0;
+    if (scroll.value) {
+      let left = 46;
+      for (let i = 0; i < col - startCol.value; i++)
+        left += colWidth(startCol.value + i);
+      scroll.value.scrollTop = Math.max(0, y - 28);
+      scroll.value.scrollLeft = Math.max(0, left - 80);
+    }
+    scrollTop.value = scroll.value?.scrollTop || 0;
+    clientHeight.value = scroll.value?.clientHeight || 600;
+    rowPage.value = Math.floor(row / pageRows);
+    return true;
+  }
+  const freezeFirstRow = ref(true);
+  const freezeFirstCol = ref(true);
   watch(sheetName, () => {
     loadedRowCount.value = 200;
     rowPage.value = 0;
@@ -459,6 +493,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     scroll,
     onScroll,
     jump,
+    locateCell,
+    freezeFirstRow,
+    freezeFirstCol,
     book,
     sheetName,
     rowPage,

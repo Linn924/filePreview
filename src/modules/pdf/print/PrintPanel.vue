@@ -130,7 +130,7 @@ async function choose() {
           </option>
         </select></label
       >
-      <p>拖入 PDF 或点击“添加 PDF”；在每个文件下设置参数并勾选打印。</p>
+      <p>拖入文件或点击“添加文件”；在每个文件下设置参数并勾选打印。支持 PDF、图片与 DOCX。</p>
       <p v-if="!printers.length">未找到打印机，请先在 Windows 中配置打印机。</p>
       <p v-if="queueNote" class="queue-note" role="status">{{ queueNote }}</p>
       <p v-else class="queue-hint">
@@ -213,7 +213,7 @@ async function choose() {
         按列表顺序使用每个文件自己的设置。“已提交”表示交给系统队列；停止后续任务不会取消已提交的任务。
       </p>
       <footer>
-        <button :disabled="busy" @click="choose">添加 PDF</button
+        <button :disabled="busy" @click="choose">添加文件</button
         ><button v-if="busy" @click="stop = true" :disabled="stop">
           {{ stop ? "将在当前任务后停止" : "停止后续任务" }}</button
         ><button

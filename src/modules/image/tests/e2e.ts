@@ -62,6 +62,25 @@ const suite: Suite = async (c) => {
     );
     c.close(win);
   }
+  const png = await c.open("image.png");
+  await c.check(
+    png,
+    "image print button present",
+    "!!document.querySelector('.file-print-button')",
+  );
+  await c.click(png, ".image-rotate");
+  await c.check(
+    png,
+    "image rotates 90",
+    "document.querySelector('.image-rotate').textContent.includes('90')",
+  );
+  await c.click(png, ".image-original");
+  await c.check(
+    png,
+    "image original pixel mode",
+    "!!document.querySelector('.image-original[aria-pressed=\"true\"]')",
+  );
+  c.close(png);
   c.program.updateSettings({ theme: "dark" });
   const dark = await c.open("vector.svg");
   await c.check(

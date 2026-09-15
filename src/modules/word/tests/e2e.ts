@@ -11,12 +11,18 @@ const suite: Suite = async (c) => {
       "Word content " + name,
       "document.querySelector('.word-host').shadowRoot.textContent.length>100",
     );
-    if (name === "document.docx")
+    if (name === "document.docx") {
       await c.check(
         win,
         "Word table resize handles",
         "!!document.querySelector('.word-host').shadowRoot.querySelector('.column-resize-handle')",
       );
+      await c.check(
+        win,
+        "Word print button present",
+        "!!document.querySelector('.file-print-button')",
+      );
+    }
     if (name === "document.docx")
       await checkResize(
         c,

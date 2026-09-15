@@ -2,6 +2,7 @@
 import PageNavigation from "../../components/PageNavigation.vue";
 import type { PreviewProps } from "../types";
 import { usePreview } from "./usePreview";
+import { ref } from "vue";
 const props = defineProps<PreviewProps>();
 const emit = defineEmits<{
   ready: [];
@@ -14,6 +15,9 @@ const {
   scroll,
   onScroll,
   jump,
+  locateCell,
+  freezeFirstRow,
+  freezeFirstCol,
   book,
   sheetName,
   rowPage,
@@ -35,6 +39,12 @@ const {
   resizeColumn,
   XLSX,
 } = usePreview(props, emit);
+const locateRef = ref("");
+const locateMsg = ref("");
+async function locate() {
+  const ok = await locateCell(locateRef.value);
+  locateMsg.value = ok ? `已定位 ${locateRef.value.toUpperCase()}` : "无效单元格，例如 B12";
+}
 </script>
 <template>
   <section ref="pane" class="excel">
@@ -51,11 +61,31 @@ const {
       >
         {{ name }}
       </button>
+      <label class="cell-locate"
+        >定位<input
+          v-model="locateRef"
+          class="cell-locate-input"
+          placeholder="如 B12"
+          aria-label="定位单元格"
+          @keydown.enter.prevent="locate"
+        />
+        <button type="button" @click="locate">跳转</button>
+        <small v-if="locateMsg">{{ locateMsg }}</small></label
+      >
+      <label class="freeze-toggle"
+        ><input v-model="freezeFirstRow" type="checkbox" /> 冻结首行</label
+      ><label class="freeze-toggle"
+        ><input v-model="freezeFirstCol" type="checkbox" /> 冻结首列</label
+      >
     </nav>
     <div ref="scroll" class="table-wrap" @scroll.passive="onScroll">
       <div
         v-if="rows.length"
         class="sheet-surface"
+        :class="{
+          'freeze-row': freezeFirstRow,
+          'freeze-col': freezeFirstCol,
+        }"
         :style="{ zoom: zoom / 100 }"
       >
         <table class="spreadsheet preview-content">

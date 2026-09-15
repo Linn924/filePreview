@@ -5,5 +5,8 @@ export default {
   pageFit: true,
   id: "word",
   extensions: ["docx", "doc"],
+  toolbar: defineAsyncComponent(
+    () => import("../../components/FilePrintButton.vue"),
+  ),
   component: defineAsyncComponent(() => import("./index.vue")),
 } satisfies PreviewModule;

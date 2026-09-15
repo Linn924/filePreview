@@ -150,7 +150,7 @@ const suite: Suite = async (c) => {
       canceled: false,
       filePaths: [c.fixture("document.pdf")],
     })) as typeof dialog.showOpenDialog;
-    await c.click(win, ".pdf-print-panel footer button", "添加 PDF");
+    await c.click(win, ".pdf-print-panel footer button", "添加文件");
     await c.check(
       win,
       "batch list contains two PDFs",
@@ -233,7 +233,7 @@ const suite: Suite = async (c) => {
       canceled: false,
       filePaths: Array(13).fill(c.fixture("document.pdf")),
     })) as typeof dialog.showOpenDialog;
-    await c.click(win, ".pdf-print-panel footer button", "添加 PDF");
+    await c.click(win, ".pdf-print-panel footer button", "添加文件");
     await c.click(win, ".print-file-card:last-child .preview-print-file");
     await c.check(
       preview,
@@ -288,6 +288,21 @@ const suite: Suite = async (c) => {
       "!document.querySelector('.pdf-print-button')",
     );
     c.close(text);
+    // Image print: submit intercepted, in-memory only.
+    const img = await c.open("image.png");
+    await c.click(img, ".file-print-button");
+    await c.pause(300);
+    const imgPanel = BrowserWindow.getAllWindows().find((w) =>
+      w.webContents.getURL().includes("print-panel=1"),
+    );
+    if (!imgPanel) throw Error("image print panel missing");
+    await c.check(
+      imgPanel,
+      "image appears in print list",
+      "document.body.textContent.includes('image.png')",
+    );
+    c.close(imgPanel);
+    c.close(img);
     c.program.updateSettings({ multiFileMode: "tabs", printEntry: "all" });
     const multi = await c.program.openPaths([
       c.fixture("document.pdf"),

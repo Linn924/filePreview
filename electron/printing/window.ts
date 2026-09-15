@@ -17,8 +17,19 @@ export function setupPrintWindow(
     trusted(event);
     preview = BrowserWindow.fromWebContents(event.sender) || undefined;
     const list = Array.isArray(files) ? files : [];
+    const printable = new Set([
+      "pdf",
+      "png",
+      "jpg",
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "svg",
+      "docx",
+    ]);
     for (const file of list)
-      if (file?.ext === "pdf" && file?.id) incoming.push(file);
+      if (file?.ext && printable.has(file.ext) && file?.id) incoming.push(file);
     if (!panel || panel.isDestroyed()) {
       busy = false;
       const area = screen.getDisplayMatching(
@@ -83,7 +94,18 @@ export function setupPrintWindow(
   });
   ipcMain.handle("print:preview-file", async (event, file: PreviewFile) => {
     trusted(event);
-    if (event.sender.id !== panel?.webContents.id || file?.ext !== "pdf")
+    const printable = new Set([
+      "pdf",
+      "png",
+      "jpg",
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "svg",
+      "docx",
+    ]);
+    if (event.sender.id !== panel?.webContents.id || !file?.ext || !printable.has(file.ext))
       throw Error("无效打印预览。");
     if (preview && !preview.isDestroyed()) {
       registerFiles(preview.webContents.id, [file]);
