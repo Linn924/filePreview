@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from "vue";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 const props = defineProps<{
@@ -14,10 +21,15 @@ interface OutlineItem {
   depth: number;
 }
 const outline = ref<OutlineItem[]>([]);
-const thumbs = ref<Array<{ page: number; width: number; height: number }>>([]);
 const thumbHost = ref<HTMLElement>();
 const THUMB_CSS_W = 112;
-/** page number -> in-flight or finished render task (cancel before re-paint) */
+const THUMB_GAP = 10; // matches .thumb margin-bottom
+const EST_H = 148;
+const pageCount = ref(0);
+/** page index 0-based → css height (filled lazily) */
+const heights = ref<number[]>([]);
+const scrollTop = ref(0);
+const clientH = ref(400);
 const tasks = new Map<number, RenderTask>();
 const paintedPages = new Set<number>();
 let paintEpoch = 0;
@@ -62,20 +74,77 @@ async function loadOutline() {
   }
 }
 
-async function loadThumbs() {
-  thumbs.value = [];
+function initThumbsMeta() {
   paintedPages.clear();
-  if (!props.pdf) return;
-  const max = Math.min(props.pdf.numPages, 200);
-  const sizes: Array<{ page: number; width: number; height: number }> = [];
-  for (let n = 1; n <= max; n++) {
-    const page = await props.pdf.getPage(n);
-    // Do NOT page.cleanup() — document is shared with the main preview.
-    const v = page.getViewport({ scale: 1, rotation: page.rotate });
-    const h = Math.round((v.height / (v.width || 1)) * THUMB_CSS_W) || 140;
-    sizes.push({ page: n, width: THUMB_CSS_W, height: h });
+  if (!props.pdf) {
+    pageCount.value = 0;
+    heights.value = [];
+    return;
   }
-  thumbs.value = sizes;
+  pageCount.value = props.pdf.numPages;
+  heights.value = Array.from({ length: props.pdf.numPages }, () => EST_H);
+}
+
+async function ensureSize(index: number) {
+  if (!props.pdf) return;
+  if (heights.value[index] !== EST_H) return;
+  try {
+    const page = await props.pdf.getPage(index + 1);
+    const v = page.getViewport({ scale: 1 });
+    const h = Math.round((v.height / (v.width || 1)) * THUMB_CSS_W) || EST_H;
+    heights.value[index] = h;
+  } catch {
+    /* keep estimate */
+  }
+}
+
+const offsets = computed(() => {
+  const out = [0];
+  for (let i = 0; i < heights.value.length; i++)
+    out.push(out[i] + heights.value[i] + THUMB_GAP);
+  return out;
+});
+function indexAt(y: number) {
+  const o = offsets.value;
+  let lo = 0,
+    hi = Math.max(0, pageCount.value - 1);
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (o[mid + 1] <= y) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+const OVERSCAN = 3;
+const virtualStart = ref(0);
+const virtualEnd = ref(1);
+const padTop = computed(() => offsets.value[virtualStart.value] || 0);
+const padBottom = computed(() => {
+  const o = offsets.value;
+  const total = o[o.length - 1] || 0;
+  return Math.max(0, total - (o[virtualEnd.value] ?? total));
+});
+const visibleThumbs = computed(() => {
+  const list: number[] = [];
+  for (let i = virtualStart.value; i < virtualEnd.value; i++) list.push(i);
+  return list;
+});
+
+function updateVirtual() {
+  const host = thumbHost.value;
+  const n = pageCount.value;
+  if (!host || !n) {
+    virtualStart.value = 0;
+    virtualEnd.value = Math.min(n, 1);
+    return;
+  }
+  scrollTop.value = host.scrollTop;
+  clientH.value = host.clientHeight || 400;
+  virtualStart.value = Math.max(0, indexAt(scrollTop.value) - OVERSCAN);
+  virtualEnd.value = Math.min(
+    n,
+    indexAt(scrollTop.value + clientH.value) + 1 + OVERSCAN,
+  );
 }
 
 function canvasLooksBlank(canvas: HTMLCanvasElement) {
@@ -101,16 +170,16 @@ async function paintOne(node: HTMLElement, pageNumber: number, epoch: number) {
     tasks.delete(pageNumber);
   }
   try {
-    const pdfPage = await props.pdf.getPage(pageNumber);
+    const pdfPage = await props.pdf.getPage(pageNumber + 1);
     if (disposed || epoch !== paintEpoch || tab.value !== "thumbs") return;
     const base = pdfPage.getViewport({ scale: 1 });
     const cssW = THUMB_CSS_W;
     const cssH =
       Math.round((base.height / (base.width || 1)) * cssW) ||
       canvas.clientHeight ||
-      140;
+      EST_H;
+    heights.value[pageNumber] = cssH;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    // Same viewport rotation as main view so thumbnail matches the page.
     const viewport = pdfPage.getViewport({
       scale: (cssW / (base.width || 1)) * dpr,
     });
@@ -128,7 +197,6 @@ async function paintOne(node: HTMLElement, pageNumber: number, epoch: number) {
     if (disposed || epoch !== paintEpoch) return;
     paintedPages.add(pageNumber);
     node.classList.add("thumb-painted");
-    // Never cleanup() the shared page — it would detach main-view operator lists.
   } catch (e) {
     if ((e as { name?: string })?.name === "RenderingCancelledException")
       return;
@@ -141,13 +209,14 @@ async function paintOne(node: HTMLElement, pageNumber: number, epoch: number) {
 
 function schedulePaint() {
   if (tab.value !== "thumbs" || !props.pdf || !thumbHost.value) return;
+  updateVirtual();
   const epoch = ++paintEpoch;
   const host = thumbHost.value;
   const hostRect = host.getBoundingClientRect();
   const nodes = Array.from(host.querySelectorAll<HTMLElement>(".thumb"));
   for (const node of nodes) {
     const page = Number(node.dataset.page);
-    if (!page) continue;
+    if (!Number.isFinite(page)) continue;
     const canvas = node.querySelector("canvas");
     if (!canvas) continue;
     if (paintedPages.has(page) && !canvasLooksBlank(canvas)) {
@@ -155,7 +224,6 @@ function schedulePaint() {
       continue;
     }
     const rect = node.getBoundingClientRect();
-    // When panel is display:none rects collapse — still repaint after re-show.
     const hidden = hostRect.width === 0 && hostRect.height === 0;
     if (!hidden) {
       if (rect.bottom < hostRect.top - 400 || rect.top > hostRect.bottom + 400)
@@ -163,29 +231,29 @@ function schedulePaint() {
     }
     void paintOne(node, page, epoch);
   }
+  // Resolve placeholder heights near the window so scroll length stays stable.
+  for (let i = virtualStart.value; i < virtualEnd.value; i++)
+    void ensureSize(i);
 }
 
 async function showThumbsAndPaint() {
   await nextTick();
-  // Wait a frame so v-show layout is real before measuring.
   await new Promise<void>((resolve) =>
     requestAnimationFrame(() => resolve()),
   );
   if (tab.value !== "thumbs") return;
-  // Force blank/partial canvases to repaint after 目录 ↔ 缩略图 switches.
-  for (const t of thumbs.value) {
+  for (const i of visibleThumbs.value) {
     const node = thumbHost.value?.querySelector<HTMLElement>(
-      `.thumb[data-page="${t.page}"]`,
+      `.thumb[data-page="${i}"]`,
     );
     const canvas = node?.querySelector("canvas");
-    if (canvas && canvasLooksBlank(canvas)) paintedPages.delete(t.page);
+    if (canvas && canvasLooksBlank(canvas)) paintedPages.delete(i);
   }
   schedulePaint();
 }
 
 watch(tab, async (value) => {
   if (value !== "thumbs") {
-    // Cancel in-flight thumb renders so they cannot fight a later paint.
     paintEpoch++;
     for (const [, task] of tasks) {
       try {
@@ -197,15 +265,16 @@ watch(tab, async (value) => {
     tasks.clear();
     return;
   }
+  updateVirtual();
   await showThumbsAndPaint();
 });
-watch(thumbs, async () => {
+watch(visibleThumbs, () => {
   if (tab.value !== "thumbs") return;
-  await showThumbsAndPaint();
+  void nextTick().then(() => schedulePaint());
 });
 onMounted(async () => {
   await loadOutline();
-  await loadThumbs();
+  initThumbsMeta();
 });
 onBeforeUnmount(() => {
   disposed = true;
@@ -273,23 +342,31 @@ const hasOutline = computed(() => outline.value.length > 0);
       aria-label="缩略图"
       @scroll.passive="schedulePaint()"
     >
+      <p class="thumb-meta">共 {{ pageCount }} 页</p>
+      <div v-if="padTop > 0" class="thumb-pad" :style="{ height: padTop + 'px' }"></div>
       <div
-        v-for="t in thumbs"
-        :key="t.page"
+        v-for="i in visibleThumbs"
+        :key="i"
         class="thumb"
-        :data-page="t.page"
-        :class="{ current: t.page === current }"
+        :data-page="i"
+        :class="{ current: i + 1 === current }"
         role="button"
         tabindex="0"
-        :aria-label="'第 ' + t.page + ' 页缩略图'"
-        @click="emit('jump', t.page)"
-        @keydown.enter="emit('jump', t.page)"
+        :aria-label="'第 ' + (i + 1) + ' 页缩略图'"
+        :style="{ height: heights[i] + 24 + 'px' }"
+        @click="emit('jump', i + 1)"
+        @keydown.enter="emit('jump', i + 1)"
       >
         <canvas
-          :style="{ width: t.width + 'px', height: t.height + 'px' }"
+          :style="{ width: THUMB_CSS_W + 'px', height: heights[i] + 'px' }"
         ></canvas>
-        <span>{{ t.page }}</span>
+        <span>{{ i + 1 }}</span>
       </div>
+      <div
+        v-if="padBottom > 0"
+        class="thumb-pad"
+        :style="{ height: padBottom + 'px' }"
+      ></div>
     </div>
   </aside>
 </template>
