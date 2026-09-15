@@ -23,7 +23,7 @@ const suite: Suite = async (c) => {
     await c.check(
       win,
       `${mode}: ${value || "empty"} → ${expected}%`,
-      `${input}.value==='${expected}' && Math.abs(parseFloat(getComputedStyle(document.querySelector('.text pre')).fontSize)-${(14 * expected) / 100})<0.02`,
+      `${input}.value==='${expected}' && Math.abs(parseFloat(getComputedStyle(document.querySelector('.text-code')).fontSize)-${(14 * expected) / 100})<0.02`,
     );
   }
   await enter("137", "enter", 137);
