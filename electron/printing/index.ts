@@ -179,9 +179,10 @@ export function setupPrinting(local: Session) {
             : Error(
                 reason === "Print job canceled"
                   ? "打印已取消。"
-                  : reason === "Invalid printer settings"
-                    ? "打印设置不受支持，请检查纸张和打印机。"
-                    : "打印任务提交失败，请检查打印机状态。",
+                  : reason === "Invalid printer settings" ||
+                      /paper|size|settings/i.test(String(reason || ""))
+                    ? `当前打印机可能不支持 ${options.paper}，请改用 A4 或在驱动中启用 ${options.paper}。`
+                    : `打印任务提交失败（${reason || "未知原因"}）。若纸张为 ${options.paper}，请确认打印机驱动已支持该尺寸。`,
               ),
         ),
     );

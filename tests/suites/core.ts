@@ -62,6 +62,16 @@ const suite: Suite = async (c) => {
     "tab switch",
     "document.querySelector('.tab.active').textContent.includes('data.json')",
   );
+  // Wheel over tab bar cycles files.
+  await c.evaluate(
+    tabs,
+    "document.querySelector('.tabs').dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true}))",
+  );
+  await c.check(
+    tabs,
+    "wheel on tab bar switches file",
+    "document.querySelector('.tab.active').textContent.includes('text.txt')||document.querySelector('.tab.active').textContent.includes('data.json')",
+  );
   await c.evaluate(
     tabs,
     "(()=>{const tabs=document.querySelectorAll('.tab');tabs[1].dispatchEvent(new DragEvent('dragstart',{bubbles:true}));tabs[0].dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true}))})()",

@@ -312,10 +312,7 @@ const suite: Suite = async (c) => {
     const img = await c.open("image.png");
     await c.click(img, ".file-print-button");
     await c.pause(300);
-    const imgPanel = BrowserWindow.getAllWindows().find((w) =>
-      w.webContents.getURL().includes("print-panel=1"),
-    );
-    if (!imgPanel) throw Error("image print panel missing");
+    const imgPanel = await waitPrintPanel();
     await c.check(
       imgPanel,
       "image appears in print list",
