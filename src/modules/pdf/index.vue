@@ -51,7 +51,10 @@ watch(
   () => search.active.value,
   () => {
     const hit = activeHit.value;
-    if (hit) jump(hit.page);
+    if (hit) {
+      jump(hit.page);
+      highlightActiveHit();
+    }
   },
 );
 async function runSearch() {
@@ -59,6 +62,18 @@ async function runSearch() {
   if (!search.hits.value.length) return;
   search.active.value = 0;
   jump(search.hits.value[0].page);
+  highlightActiveHit();
+}
+function highlightActiveHit() {
+  const hit = activeHit.value;
+  if (!hit) return;
+  void nextTick().then(() => {
+    const el = scroll.value?.querySelector<HTMLElement>(
+      `.pdf-page[data-page="${hit.page - 1}"]`,
+    );
+    el?.classList.add("is-active-hit");
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
 }
 function buildTextLayer(pageEl: HTMLElement, index: number) {
   const doc = pdf.value;

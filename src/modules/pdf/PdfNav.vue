@@ -66,7 +66,7 @@ async function loadThumbs() {
   thumbs.value = [];
   paintedPages.clear();
   if (!props.pdf) return;
-  const max = Math.min(props.pdf.numPages, 40);
+  const max = Math.min(props.pdf.numPages, 200);
   const sizes: Array<{ page: number; width: number; height: number }> = [];
   for (let n = 1; n <= max; n++) {
     const page = await props.pdf.getPage(n);
