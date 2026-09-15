@@ -4,7 +4,10 @@
 
 | 文件 | 生成方式 | 覆盖点 |
 | --- | --- | --- |
-| `work/fixtures/complex-table.docx` | 本地 JSZip 生成 | 三列表格、宽备注列、中文单元格；用于列宽拖动与跨窗口迁移 |
+| `work/fixtures/complex-table.docx` | 本地 JSZip 生成 | 三列表格、宽备注列、中文单元格 |
+| `work/fixtures/wide-table.docx` | 本地 JSZip 生成 | 12×8 宽表，冻结/定位回归 |
+| `work/fixtures/bench-long-200.pdf` | bench 脚本生成 | 200 页合成 PDF（库级基线） |
+| `work/fixtures/bench-huge.xlsx` | bench 脚本生成 | 约 5 万行（库级基线） |
 | `work/fixtures/styled.xlsx` | fixtures 脚本 | 合并单元格、主题色、百分比、多 Sheet、宽表 |
 | `work/fixtures/pages.docx` | word 测试自动生成 | 分页符与连续滚动 |
 | `work/fixtures/long-mixed.pdf` | pdf 测试 / bench 生成 | 80 页横竖混合 |

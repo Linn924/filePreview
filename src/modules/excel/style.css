@@ -222,15 +222,23 @@
   gap: 4px;
   white-space: nowrap;
 }
+.freeze-num {
+  width: 48px;
+  padding: 3px 4px;
+  font-size: 12px;
+}
 .sheet-surface.freeze-row .spreadsheet thead th {
   position: sticky;
   top: 0;
   z-index: 3;
 }
-.sheet-surface.freeze-row .spreadsheet tbody tr > th:first-child {
+.sheet-surface.freeze-row .spreadsheet tbody tr[data-frozen] th,
+.sheet-surface.freeze-row .spreadsheet tbody tr[data-frozen] td {
   position: sticky;
-  left: 0;
   z-index: 2;
+}
+.sheet-surface.freeze-row .spreadsheet tbody tr[data-frozen] th {
+  z-index: 4;
 }
 .sheet-surface.freeze-col .spreadsheet tbody tr > th:first-child,
 .sheet-surface.freeze-col .spreadsheet thead th:first-child {
@@ -240,4 +248,10 @@
 }
 .sheet-surface.freeze-row.freeze-col .spreadsheet thead th:first-child {
   z-index: 5;
+}
+/* Extra frozen data columns (first data col is index 0 after row header). */
+.sheet-surface.freeze-col .spreadsheet tbody tr > td[data-freeze-col],
+.sheet-surface.freeze-col .spreadsheet thead th[data-freeze-col] {
+  position: sticky;
+  z-index: 3;
 }

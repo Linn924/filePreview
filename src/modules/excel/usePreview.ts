@@ -170,6 +170,38 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   }
   const freezeFirstRow = ref(true);
   const freezeFirstCol = ref(true);
+  /** Extra frozen body rows / data cols beyond the first (sticky headers always frozen). */
+  const freezeRows = ref(0);
+  const freezeCols = ref(0);
+  function clampFreeze(n: number) {
+    return Math.max(0, Math.min(8, Math.floor(n) || 0));
+  }
+  watch(freezeRows, (v) => {
+    freezeRows.value = clampFreeze(v);
+  });
+  watch(freezeCols, (v) => {
+    freezeCols.value = clampFreeze(v);
+  });
+  const HEADER_H = 28;
+  const ROW_HEAD_W = 46;
+  const freezeTop = computed(() => {
+    const tops: number[] = [];
+    let y = HEADER_H;
+    for (let r = 0; r < freezeRows.value; r++) {
+      tops.push(y);
+      y += rowHeight(r);
+    }
+    return tops;
+  });
+  const freezeLeft = computed(() => {
+    const lefts: number[] = [];
+    let x = ROW_HEAD_W;
+    for (let c = 0; c < freezeCols.value; c++) {
+      lefts.push(x);
+      x += colWidth(startCol.value + c);
+    }
+    return lefts;
+  });
   watch(sheetName, () => {
     loadedRowCount.value = 200;
     rowPage.value = 0;
@@ -496,6 +528,10 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     locateCell,
     freezeFirstRow,
     freezeFirstCol,
+    freezeRows,
+    freezeCols,
+    freezeTop,
+    freezeLeft,
     book,
     sheetName,
     rowPage,

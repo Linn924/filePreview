@@ -180,6 +180,26 @@ await save("document.pdf", Buffer.from(pdf));
   );
   await save("complex-table.docx", await zip.generateAsync({ type: "nodebuffer" }));
 }
+// Nested + multi-level table sample for freeze/locate regression.
+{
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  const tc = (t: string) =>
+    `<w:tc><w:p><w:r><w:t>${t}</w:t></w:r></w:p></w:tc>`;
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>宽表与冻结样例</w:t></w:r></w:p><w:tbl>${Array.from({ length: 12 }, (_, i) => `<w:tr>${Array.from({ length: 8 }, (_, j) => tc(i === 0 ? "H" + j : "R" + i + "C" + j)).join("")}</w:tr>`).join("")}</w:tbl></w:body></w:document>`,
+  );
+  await save("wide-table.docx", await zip.generateAsync({ type: "nodebuffer" }));
+}
 for (const [name, url] of [
   [
     "legacy.ppt",

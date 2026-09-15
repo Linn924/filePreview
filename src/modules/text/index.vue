@@ -25,14 +25,30 @@ const hitCount = computed(() => {
   );
 });
 const isCode = computed(() =>
-  ["json", "xml", "log", "txt", "text", "md"].includes(props.file.ext),
+  [
+    "json",
+    "xml",
+    "log",
+    "txt",
+    "text",
+    "md",
+    "js",
+    "ts",
+    "css",
+    "ini",
+    "yaml",
+    "yml",
+    "toml",
+  ].includes(props.file.ext),
 );
+function esc(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+}
 function highlightLine(line: string) {
-  if (!isCode.value) return line;
-  if (props.file.ext === "json") {
-    return line
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
+  if (!isCode.value) return esc(line);
+  const ext = props.file.ext;
+  if (ext === "json") {
+    return esc(line)
       .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (_m, str, colon) =>
         colon
           ? `<span class="tok-key">${str}</span>${colon}`
@@ -41,13 +57,41 @@ function highlightLine(line: string) {
       .replace(/\b(true|false|null)\b/g, '<span class="tok-kw">$1</span>')
       .replace(/\b(-?\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
   }
-  if (props.file.ext === "xml")
-    return line
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
+  if (ext === "xml")
+    return esc(line)
       .replace(/(&lt;\/?)([\w:.-]+)/g, '$1<span class="tok-key">$2</span>')
       .replace(/("(?:[^"]*)")/g, '<span class="tok-str">$1</span>');
-  return line.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  if (ext === "js" || ext === "ts")
+    return esc(line)
+      .replace(/(\/\/.*$)/g, '<span class="tok-cmt">$1</span>')
+      .replace(
+        /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|type|interface|new|try|catch|typeof)\b/g,
+        '<span class="tok-kw">$1</span>',
+      )
+      .replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g, '<span class="tok-str">$1</span>')
+      .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
+  if (ext === "css")
+    return esc(line)
+      .replace(/(\/\*[\s\S]*?\*\/|\/\/.*$)/g, '<span class="tok-cmt">$1</span>')
+      .replace(/([.#][\w-]+)/g, '<span class="tok-key">$1</span>')
+      .replace(/(#[0-9a-fA-F]{3,8})\b/g, '<span class="tok-num">$1</span>')
+      .replace(/(:\s*[\w-]+)/g, '<span class="tok-str">$1</span>');
+  if (ext === "ini" || ext === "toml")
+    return esc(line)
+      .replace(/(^\s*[#;].*$)/g, '<span class="tok-cmt">$1</span>')
+      .replace(/^(\s*\[[^\]]+\])/, '<span class="tok-key">$1</span>')
+      .replace(/^(\s*[\w.-]+)(\s*=)/, '$1<span class="tok-kw">$2</span>');
+  if (ext === "yaml" || ext === "yml")
+    return esc(line)
+      .replace(/(^\s*#.*$)/g, '<span class="tok-cmt">$1</span>')
+      .replace(/^(\s*-?\s*)([\w.-]+)(:)/, '$1<span class="tok-key">$2</span>$3')
+      .replace(/(:\s*)(true|false|null)\b/gi, '$1<span class="tok-kw">$2</span>');
+  if (ext === "log")
+    return esc(line).replace(
+      /\b(ERROR|WARN|WARNING|INFO|DEBUG|TRACE)\b/g,
+      '<span class="tok-kw">$1</span>',
+    );
+  return esc(line);
 }
 function markSearch(line: string) {
   const q = query.value.trim();

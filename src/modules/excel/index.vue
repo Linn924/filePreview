@@ -18,6 +18,10 @@ const {
   locateCell,
   freezeFirstRow,
   freezeFirstCol,
+  freezeRows,
+  freezeCols,
+  freezeTop,
+  freezeLeft,
   book,
   sheetName,
   rowPage,
@@ -73,9 +77,27 @@ async function locate() {
         <small v-if="locateMsg">{{ locateMsg }}</small></label
       >
       <label class="freeze-toggle"
-        ><input v-model="freezeFirstRow" type="checkbox" /> 冻结首行</label
+        ><input v-model="freezeFirstRow" type="checkbox" /> 首行</label
       ><label class="freeze-toggle"
-        ><input v-model="freezeFirstCol" type="checkbox" /> 冻结首列</label
+        ><input v-model="freezeFirstCol" type="checkbox" /> 首列</label
+      ><label class="freeze-toggle"
+        >+行<input
+          v-model.number="freezeRows"
+          class="freeze-num"
+          type="number"
+          min="0"
+          max="8"
+          aria-label="额外冻结行数"
+      /></label
+      ><label class="freeze-toggle"
+        >+列<input
+          v-model.number="freezeCols"
+          class="freeze-num"
+          type="number"
+          min="0"
+          max="8"
+          aria-label="额外冻结列数"
+      /></label
       >
     </nav>
     <div ref="scroll" class="table-wrap" @scroll.passive="onScroll">
@@ -86,7 +108,11 @@ async function locate() {
           'freeze-row': freezeFirstRow,
           'freeze-col': freezeFirstCol,
         }"
-        :style="{ zoom: zoom / 100 }"
+        :style="{
+          zoom: zoom / 100,
+          '--freeze-rows': freezeRows,
+          '--freeze-cols': freezeCols,
+        }"
       >
         <table class="spreadsheet preview-content">
           <colgroup>
@@ -125,13 +151,33 @@ async function locate() {
               v-for="row in rows"
               :key="row.r"
               :data-row="row.r"
-              :style="{ height: row.height + 'px' }"
+              :data-frozen="row.r < freezeRows ? '1' : undefined"
+              :style="{
+                height: row.height + 'px',
+                ...(row.r < freezeRows
+                  ? {
+                      position: 'sticky' as const,
+                      top: (freezeTop[row.r] ?? 28) + 'px',
+                      zIndex: 2,
+                      background: 'var(--panel)',
+                    }
+                  : null),
+              }"
             >
               <th>{{ row.r + 1 }}</th>
               <td
                 v-for="cell in row.cells"
                 :key="cell.c"
-                :style="cell.style"
+                :style="[
+                  cell.style,
+                  cell.c - startCol < freezeCols
+                    ? {
+                        position: 'sticky' as const,
+                        left: (freezeLeft[cell.c - startCol] ?? 46) + 'px',
+                        zIndex: 2,
+                      }
+                    : null,
+                ]"
                 :rowspan="cell.rowspan"
                 :colspan="cell.colspan"
                 :title="cell.text"

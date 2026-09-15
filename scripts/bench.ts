@@ -56,6 +56,41 @@ if (!existsSync(xlsxPath)) {
     ws.getRow(r).values = Array.from({ length: 8 }, (_, c) => r * 10 + c);
   writeFileSync(xlsxPath, Buffer.from(await wb.xlsx.writeBuffer()));
 }
+// Larger stress samples (optional, generated once)
+const bigPdfPath = resolve("work/fixtures/bench-long-200.pdf");
+if (!existsSync(bigPdfPath)) {
+  const count = 200;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    `<< /Type /Pages /Kids [${Array.from({ length: count }, (_, i) => `${3 + i} 0 R`).join(" ")}] /Count ${count} >>`,
+  ];
+  for (let i = 0; i < count; i++)
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${i % 2 ? "842 595" : "595 842"}] /Resources << >> /Contents ${3 + count} 0 R >>`,
+    );
+  const content = "0.2 0.4 0.8 rg 40 40 180 180 re f";
+  objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  let pdf = "%PDF-1.4\n";
+  const offsets = objects.map((object, i) => {
+    const offset = Buffer.byteLength(pdf);
+    pdf += `${i + 1} 0 obj\n${object}\nendobj\n`;
+    return offset;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((n) => String(n).padStart(10, "0") + " 00000 n \n").join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  writeFileSync(bigPdfPath, pdf);
+}
+const bigXlsxPath = resolve("work/fixtures/bench-huge.xlsx");
+if (!existsSync(bigXlsxPath)) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("超大表");
+  for (let c = 1; c <= 12; c++) ws.getColumn(c).width = 12;
+  ws.getRow(1).values = Array.from({ length: 12 }, (_, i) => "C" + (i + 1));
+  for (let r = 2; r <= 50000; r++)
+    ws.getRow(r).values = Array.from({ length: 12 }, (_, c) => r + c);
+  writeFileSync(bigXlsxPath, Buffer.from(await wb.xlsx.writeBuffer()));
+}
 
 await time("read long-mixed.pdf", async () => {
   void readFileSync(pdfPath).byteLength;
@@ -67,6 +102,15 @@ await time("pdfjs getDocument+page1 (long-mixed)", async () => {
   await pdf.getPage(1);
   await task.destroy();
 });
+if (existsSync(bigPdfPath)) {
+  await time("pdfjs getDocument+page1 (200-page)", async () => {
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const task = getDocument({ data: new Uint8Array(readFileSync(bigPdfPath)) });
+    const pdf = await task.promise;
+    await pdf.getPage(1);
+    await task.destroy();
+  });
+}
 await time("xlsx parse bench-large (10k rows)", async () => {
   const XLSX = await import("xlsx");
   const book = XLSX.read(new Uint8Array(readFileSync(xlsxPath)), {
@@ -74,6 +118,15 @@ await time("xlsx parse bench-large (10k rows)", async () => {
   });
   void book.SheetNames.length;
 });
+if (existsSync(bigXlsxPath)) {
+  await time("xlsx parse bench-huge (50k rows)", async () => {
+    const XLSX = await import("xlsx");
+    const book = XLSX.read(new Uint8Array(readFileSync(bigXlsxPath)), {
+      type: "array",
+    });
+    void book.SheetNames.length;
+  });
+}
 
 const payload = {
   at: new Date().toISOString(),

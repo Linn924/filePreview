@@ -86,7 +86,7 @@ const suite: Suite = async (c) => {
   await c.check(
     win,
     "Excel freeze toggles present",
-    "document.querySelectorAll('.freeze-toggle input').length===2",
+    "document.querySelectorAll('.freeze-toggle').length>=4 && document.querySelectorAll('.freeze-num').length===2",
   );
   await c.click(win, ".sheets button", "季度报告");
   await c.snapshot(win, "excel");
