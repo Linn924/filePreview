@@ -42,11 +42,11 @@
 | ID | 内容 | 说明 |
 | --- | --- | --- |
 | Q-1 | 安装包代码签名 | 未商业签名，SmartScreen 可能拦；需证书与流水线 |
-| Q-2 | 安装版 Open With / 卸载手工验收 | 已做「卸载重装到 D:\file-preview」；资源管理器右键与干净卸载仍建议实机点一遍 |
+| Q-2 | 安装版 Open With / 卸载手工验收 | **脚本** `npm run verify:install`；Open With 仍建议资源管理器手工点一次 |
 | Q-3 | 实体打印机出纸验收 | 自动化只做内存 PDF；A4/A5、双面、份数需真机 |
-| Q-4 | ResizeObserver 偶发警告 | 长 PDF 调窗口仍可能出现；未宣称已修 |
-| Q-5 | 超多页 PDF DOM 虚拟化 | 仍每页占位；极大页数未做窗口化 |
-| Q-6 | 打印多窗口时序测试加固 | printing 套件对窗口生命周期敏感 |
+| Q-4 | ResizeObserver 偶发警告 | **已完成**（safe RO：rAF 防抖） |
+| Q-5 | 超多页 PDF DOM 虚拟化 | **已完成**（可视窗口 + 上下 pad） |
+| Q-6 | 打印多窗口时序测试加固 | **已完成**（waitPrintPanel / closePrintPanels） |
 | Q-7 | SmartScreen 未签名引导文案 | README/安装说明可补 |
 
 ## 与用户旧清单的对照（已剔除重复）
