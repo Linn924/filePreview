@@ -171,7 +171,14 @@ function switchBy(delta: number) {
   if (next < 0 || next >= files.value.length) return false;
   tabAlignMode = "center";
   active.value = files.value[next].id;
+  void alignActiveTab("center");
   return true;
+}
+function selectTab(id: string) {
+  if (active.value === id) return;
+  tabAlignMode = "nearest";
+  active.value = id;
+  void alignActiveTab("nearest");
 }
 /** Wheel over tab bar cycles files; strip centers the new active tab. */
 function onTabsWheel(event: WheelEvent) {
@@ -313,7 +320,7 @@ onBeforeUnmount(() => {
           @dragover.prevent
           @drop.stop.prevent="dropTab($event, file.id)"
         >
-          <button :title="file.name" @click="active = file.id">
+          <button :title="file.name" @click="selectTab(file.id)">
             {{ file.name }}</button
           ><button
             class="tab-close"
