@@ -105,12 +105,12 @@ const suite: Suite = async (c) => {
       "preview is not covered by modal",
       "!document.querySelector('.pdf-print-panel,.pdf-print-backdrop')",
     );
+    await c.click(win, ".toggle-print-options");
     await c.check(
       win,
       "original and target dimensions shown",
       "document.querySelector('.paper-dimensions')?.textContent.includes('mm')",
     );
-    await c.click(win, ".toggle-print-options");
     await c.check(
       win,
       "paper layout preview canvas present",

@@ -388,8 +388,25 @@ main {
   background: var(--bg);
 }
 
-.tab .tab-name:hover {
+.tab .tab-name:hover,
+.tab .tab-name:focus-visible,
+.tab.active .tab-name {
+  background: transparent;
   color: inherit;
+}
+
+.icon-only-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.icon-only-btn .btn-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .icon-text-btn {
@@ -422,13 +439,19 @@ main {
   height: auto;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: transparent !important;
   color: inherit;
   font-size: 12px;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tab .tab-name:hover,
+.tab .tab-name:focus-visible {
+  background: transparent !important;
+  color: inherit;
 }
 
 .tab .tab-close {

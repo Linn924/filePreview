@@ -1,22 +1,28 @@
 # DESIGN NOTES — File Preview
 
 ## Mode
-Existing-codebase + convention (Windows compact desktop tool). **方案 B**.
+Existing-codebase + convention (Windows compact desktop tool). **方案 B**。
 
-## Tokens (Plan B)
-- Light: bg #F3F5F8 · panel #FFF · stage #DCE2EA · accent #0F6CBD · muted #5F6B7A
-- Dark: bg #1B1F27 · panel #252A32 · stage #12161C · accent #60A5FA
-- Control h 28px · radius 6px · tab bar 36 · filebar 36 · page-nav 28
-- Type: Segoe UI / Microsoft YaHei 11–13px
+## Tokens (Plan B · prototype.html)
+- Light: bg #F3F5F8 · panel #FFF · stage #DCE2EA · accent #0F6CBD · muted #5F6B7A · line #C9D1DB · well #F0F3F7
+- Dark: bg #1B1F27 · panel #252A32 · stage #12161C · accent #60A5FA · muted #9BA6B5 · line #3A4452 · well #2C3340
+- Control 28px · radius 6px · tab bar 36 · fixed tab 168px · idbar 28 · actbar 36 · page-nav 28
+- Icons: inline SVG only (printer / gear / upload)
 
 ## Home
-- First-run intro (localStorage `fp-home-intro-v1`): soft fireworks +「小乖专属软件」
+- Intro once (`fp-home-intro-v1`): fireworks in upper band + 「小乖专属软件」above dropzone
 - Credit **By 仔仔**
-- Primary「打开文件」+ drop hint + quiet format chips
-- `prefers-reduced-motion`: no intro animation
+- Dropzone semi-transparent so fireworks show around it
+
+## Print
+- Toolbar: **icon-only printer** (tooltip 打印)
+- Card: one-line summary; page-size list only when 「设置」expanded
+
+## Tabs
+- Fixed 168px · hover well · no white name chip · title tooltip = full name
 
 ## Avoid
-Emoji icons (use inline SVG), tall empty headers, neon, mixed hex tokens.
+Emoji, stacked CSS layers, `display !important` on `v-show` hosts.
 
 ## User preference
-简洁 / 紧凑 / 模块化；**不破坏现有功能与测试类名**。
+简洁 / 紧凑 / 模块化；**每轮迭代更新 README**；不破坏功能与测试类名。

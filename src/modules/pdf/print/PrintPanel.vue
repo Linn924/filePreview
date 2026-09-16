@@ -228,7 +228,11 @@ const orderLabel = (o?: string) =>
                 :file="row.file"
                 :options="row.options"
               />
-              <PageDimensions :file="row.file" :options="row.options" />
+              <PageDimensions
+                v-if="row.expanded"
+                :file="row.file"
+                :options="row.options"
+              />
             </div>
             <div class="print-options-pane">
               <PrintOptions
