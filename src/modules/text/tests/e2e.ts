@@ -19,7 +19,7 @@ const suite: Suite = async (c) => {
   await c.check(
     text,
     "text search marks hits",
-    "!!document.querySelector('.text-hit') && document.body.textContent.includes('行命中')",
+    "!!document.querySelector('.text-hit') && !!document.querySelector('.text-search-count')",
   );
   await c.wheel(text, ".preview-content", -120);
   await c.check(

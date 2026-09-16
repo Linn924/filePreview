@@ -889,7 +889,8 @@ main {
 .immersive .pdf-inline-tools,
 .immersive .pdf-nav,
 .immersive .filebar.idbar,
-.immersive .image-toolbar {
+.immersive .sheets,
+.immersive .notice {
   display: none;
 }
 

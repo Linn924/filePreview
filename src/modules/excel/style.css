@@ -3,28 +3,39 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  background: white;
-  margin: 18px 24px;
-  border: 1px solid #e0e5ed;
-  border-radius: 10px;
+  background: var(--stage);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
   overflow: hidden;
 }
 .sheets {
   display: flex;
+  align-items: center;
   overflow: auto;
-  gap: 6px;
-  padding: 10px 12px;
-  border-bottom: 1px solid #e5e9ef;
+  gap: 4px;
+  padding: 4px 10px;
+  min-height: 36px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
   flex-shrink: 0;
 }
 .sheets button {
-  border: 0;
+  height: 28px;
+  border: 1px solid transparent;
   white-space: nowrap;
-  background: #f4f6f9;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
 }
-.sheets .active {
-  color: #285dc8;
-  background: #e9f0fe;
+.sheets button:hover {
+  background: var(--well);
+  color: var(--text);
+}
+.sheets button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  font-weight: 600;
 }
 .table-wrap {
   overflow: auto;

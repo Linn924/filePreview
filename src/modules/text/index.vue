@@ -108,32 +108,47 @@ const showHtml = computed(
 </script>
 <template>
   <section ref="pane" class="text">
-    <div class="text-tools">
-      <label
-        >文本编码
-        <select v-model="encoding">
-          <option value="utf-8">UTF-8</option>
-          <option value="gb18030">GB18030 / GBK</option>
-          <option value="utf-16le">UTF-16 LE</option>
-          <option value="utf-16be">UTF-16 BE</option>
-        </select></label
-      ><span>{{ raw.length.toLocaleString() }} 字符</span
-      ><label
-        ><input v-model="showLines" type="checkbox" /> 行号</label
-      ><button type="button" class="text-search-toggle" @click="showSearch = !showSearch">
-        {{ showSearch ? "关闭搜索" : "搜索" }}
-      </button>
-      <input
-        v-if="showSearch"
-        v-model="query"
-        class="text-search-input"
-        aria-label="搜索文本"
-        placeholder="在文本中搜索"
-      />
-      <span v-if="showSearch && query.trim()" class="text-search-count">
-        {{ hitCount }} 行命中
+    <Teleport :to="`[data-file-id='${props.file.id}'] .module-tools`" defer>
+      <span class="text-tools filebar-inline" data-text-tools>
+        <label class="tool-field"
+          >编码
+          <select v-model="encoding" aria-label="文本编码">
+            <option value="utf-8">UTF-8</option>
+            <option value="gb18030">GBK</option>
+            <option value="utf-16le">UTF-16 LE</option>
+            <option value="utf-16be">UTF-16 BE</option>
+          </select></label
+        ><span class="tool-meta">{{ raw.length.toLocaleString() }} 字</span
+        ><label class="tool-check"
+          ><input v-model="showLines" type="checkbox" /> 行号</label
+        ><button
+          type="button"
+          class="text-search-toggle icon-only-btn"
+          :title="showSearch ? '关闭搜索' : '搜索'"
+          aria-label="搜索文本"
+          @click="showSearch = !showSearch"
+        >
+          <svg v-if="!showSearch" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <circle cx="7.2" cy="7.2" r="4.3" />
+            <path d="M10.6 10.6L13.5 13.5" />
+          </svg>
+          <svg v-else class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+          </svg>
+          <span class="sr-only">{{ showSearch ? "关闭搜索" : "搜索" }}</span>
+        </button>
+        <input
+          v-if="showSearch"
+          v-model="query"
+          class="text-search-input"
+          aria-label="搜索文本"
+          placeholder="搜索"
+        />
+        <span v-if="showSearch && query.trim()" class="text-search-count">
+          {{ hitCount }} 行
+        </span>
       </span>
-    </div>
+    </Teleport>
     <div v-if="invalidJson" class="notice">
       JSON 格式不完整，按原始文本显示。
     </div>
