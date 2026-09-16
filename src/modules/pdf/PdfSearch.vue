@@ -32,12 +32,12 @@ function submit(event: Event) {
       aria-label="搜索"
       @click="emit('update:open', !open)"
     >
-      <svg v-if="!open" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-        <circle cx="7" cy="7" r="4.5" />
-        <path d="M10.5 10.5L14 14" />
+      <svg v-if="!open" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+        <circle cx="7.2" cy="7.2" r="4.3" />
+        <path d="M10.6 10.6L13.5 13.5" />
       </svg>
-      <svg v-else class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-        <path d="M4 4l8 8M12 4l-8 8" />
+      <svg v-else class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+        <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
       </svg>
       <span class="sr-only">{{ open ? "关闭搜索" : "搜索" }}</span>
     </button>
@@ -57,9 +57,9 @@ function submit(event: Event) {
         title="查找"
         aria-label="查找"
       >
-        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <circle cx="7" cy="7" r="4.5" />
-          <path d="M10.5 10.5L14 14" />
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+          <circle cx="7.2" cy="7.2" r="4.3" />
+          <path d="M10.6 10.6L13.5 13.5" />
         </svg>
         <span class="sr-only">查找</span>
       </button>
@@ -77,8 +77,8 @@ function submit(event: Event) {
         aria-label="上一处"
         @click="emit('prev')"
       >
-        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M3 10l5-5 5 5" />
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 10l4-4 4 4" />
         </svg>
         <span class="sr-only">上一处</span>
       </button>
@@ -90,8 +90,8 @@ function submit(event: Event) {
         aria-label="下一处"
         @click="emit('next')"
       >
-        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M3 6l5 5 5-5" />
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 6l4 4 4-4" />
         </svg>
         <span class="sr-only">下一处</span>
       </button>

@@ -56,7 +56,7 @@ const suite: Suite = async (c) => {
   );
   if (prompts !== 1 || c.program.settings.get().multiFileMode !== "tabs")
     throw Error("Multi-file preference not saved");
-  await c.click(tabs, ".tab button", "data.json");
+  await c.click(tabs, ".tab .tab-name", "data.json");
   await c.check(
     tabs,
     "tab switch",

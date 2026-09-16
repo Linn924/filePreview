@@ -181,9 +181,9 @@ watch(
           aria-label="目录 / 缩略图"
           @click="navOpen = !navOpen"
         >
-          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
-            <rect x="2" y="3" width="5" height="10" rx="1" />
-            <path d="M9 4h5M9 8h5M9 12h5" />
+          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
+            <rect x="2.5" y="3.5" width="4.5" height="9" rx="1" />
+            <path d="M9 4.5h5M9 8h5M9 11.5h5" />
           </svg>
           <span class="sr-only">{{ navOpen ? "隐藏导航" : "目录 / 缩略图" }}</span>
         </button>
@@ -194,9 +194,9 @@ watch(
           aria-label="旋转预览"
           @click="cycleRotate"
         >
-          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M13 8a5 5 0 1 1-1.5-3.5" />
-            <path d="M13 2v3h-3" />
+          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13.2 8A5.2 5.2 0 1 1 11.4 4.2" />
+            <path d="M13.2 2.6v3h-3" />
           </svg>
           <span class="sr-only">旋转 {{ rotate }}°</span>
         </button>

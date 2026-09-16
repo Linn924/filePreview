@@ -117,11 +117,8 @@ async function loaded() {
         :aria-label="immersive ? '退出全屏' : '沉浸阅读'"
         @click="toggleFullscreen"
       >
-        <svg v-if="immersive" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
-        </svg>
-        <svg v-else class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />
         </svg>
         <span class="sr-only">{{ immersive ? "退出全屏" : "沉浸" }}</span>
       </button>

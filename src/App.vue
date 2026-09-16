@@ -328,23 +328,26 @@ onBeforeUnmount(() => {
           class="tab"
           :class="{ active: file.id === active }"
           draggable="true"
+          role="button"
+          tabindex="0"
+          :aria-label="file.name"
+          :title="file.name"
+          @click="selectTab(file.id)"
+          @keydown.enter.prevent="selectTab(file.id)"
+          @keydown.space.prevent="selectTab(file.id)"
           @dragstart="startDrag($event, file.id)"
           @dragend="draggedTab = ''"
           @dragover.prevent
           @drop.stop.prevent="dropTab($event, file.id)"
         >
           <i class="dot" :class="{ img: ['png','jpg','jpeg','webp','gif','bmp','svg'].includes(file.ext) }" aria-hidden="true"></i>
+          <span class="tab-name">{{ file.name }}</span>
           <button
-            class="tab-name"
-            :title="file.name"
-            :aria-label="file.name"
-            @click="selectTab(file.id)"
-          >
-            {{ file.name }}</button
-          ><button
+            type="button"
             class="tab-close"
             :aria-label="'关闭 ' + file.name"
-            @click="closeTab(file.id)"
+            title="关闭"
+            @click.stop="closeTab(file.id)"
           >
             ×
           </button>

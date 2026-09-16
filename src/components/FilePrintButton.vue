@@ -27,8 +27,9 @@ async function open() {
       aria-label="打印"
       @click="open"
     >
-      <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
-        <path d="M4 6V2h8v4M4 12H3a1 1 0 0 1-1-1V7h12v4a1 1 0 0 1-1 1h-1M4 10h8v4H4z" />
+      <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 6.2V2.5h8v3.7M4 11.5V8h8v3.5M4 11.5h8V14H4z" />
+        <path d="M5.2 11.5v-2h5.6v2" />
       </svg></button
     ><span v-if="error" role="alert">{{ error }}</span></span
   >

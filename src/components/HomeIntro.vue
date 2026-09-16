@@ -19,26 +19,45 @@ type P = {
   s: number;
 };
 
-function burst(ctx: CanvasRenderingContext2D, w: number, h: number, ps: P[]) {
-  const cx = w * (0.2 + Math.random() * 0.6);
-  const cy = h * (0.12 + Math.random() * 0.22);
-  const n = 18 + Math.floor(Math.random() * 10);
-  const hue = 200 + Math.random() * 60;
+function spawnBurst(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  ps: P[],
+  fx: number,
+  fy: number,
+) {
+  void ctx;
+  const n = 14 + Math.floor(Math.random() * 8);
+  const hue = 195 + Math.random() * 70;
   for (let i = 0; i < n; i++) {
     const a = (Math.PI * 2 * i) / n;
-    const sp = 0.8 + Math.random() * 1.4;
+    const sp = 0.75 + Math.random() * 1.35;
     ps.push({
-      x: cx,
-      y: cy,
+      x: w * fx,
+      y: h * fy,
       vx: Math.cos(a) * sp,
       vy: Math.sin(a) * sp,
       life: 0,
-      max: 48 + Math.random() * 24,
-      c: `hsla(${hue + i * 2}, 70%, 62%, 0.9)`,
-      s: 1.2 + Math.random(),
+      max: 50 + Math.random() * 22,
+      c: `hsla(${hue + i * 2}, 72%, 63%, 0.92)`,
+      s: 1.1 + Math.random(),
     });
   }
 }
+
+/** Avoid the center drop-zone band; keep bursts in upper + side margins. */
+const BURST_SPOTS: Array<[number, number]> = [
+  [0.12, 0.16],
+  [0.28, 0.1],
+  [0.72, 0.1],
+  [0.88, 0.18],
+  [0.18, 0.28],
+  [0.82, 0.26],
+  [0.5, 0.08],
+  [0.08, 0.38],
+  [0.92, 0.36],
+];
 
 function runIntro() {
   const c = canvas.value;
@@ -64,25 +83,15 @@ function runIntro() {
     const w = root.clientWidth;
     const h = root.clientHeight;
     ctx.clearRect(0, 0, w, h);
-    // Burst in the upper band so the drop zone does not hide them.
-    if (frame % 50 === 0 && frame < 200) {
-      const cx = w * (0.2 + Math.random() * 0.6);
-      const cy = h * (0.12 + Math.random() * 0.22);
-      const n = 16 + Math.floor(Math.random() * 8);
-      const hue = 200 + Math.random() * 50;
-      for (let i = 0; i < n; i++) {
-        const a = (Math.PI * 2 * i) / n;
-        const sp = 0.7 + Math.random() * 1.3;
-        ps.push({
-          x: cx,
-          y: cy,
-          vx: Math.cos(a) * sp,
-          vy: Math.sin(a) * sp,
-          life: 0,
-          max: 44 + Math.random() * 20,
-          c: `hsla(${hue + i * 2}, 72%, 64%, 0.95)`,
-          s: 1.1 + Math.random(),
-        });
+    // Multi-spot bursts around the drop zone (not under the center box).
+    if (frame < 240) {
+      if (frame % 28 === 0) {
+        const spot = BURST_SPOTS[frame / 28 % BURST_SPOTS.length];
+        spawnBurst(ctx, w, h, ps, spot[0], spot[1]);
+      }
+      if (frame % 70 === 0) {
+        const spot = BURST_SPOTS[(frame / 70 + 3) % BURST_SPOTS.length];
+        spawnBurst(ctx, w, h, ps, spot[0], spot[1]);
       }
     }
     for (let i = ps.length - 1; i >= 0; i--) {
@@ -105,7 +114,7 @@ function runIntro() {
     }
     ctx.globalAlpha = 1;
     frame++;
-    if (frame < 260) raf = requestAnimationFrame(tick);
+    if (frame < 320) raf = requestAnimationFrame(tick);
     else {
       title.value = false;
       window.removeEventListener("resize", resize);

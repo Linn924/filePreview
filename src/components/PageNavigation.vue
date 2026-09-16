@@ -17,8 +17,8 @@ function jump(event: Event) {
         aria-label="上一页"
         @click="emit('jump', current - 1)"
       >
-        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M10 3L5 8l5 5" />
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10.5 3.5L6 8l4.5 4.5" />
         </svg>
         <span class="sr-only">上一页</span></button
       ><label class="page-indicator"
@@ -40,8 +40,8 @@ function jump(event: Event) {
         aria-label="下一页"
         @click="emit('jump', current + 1)"
       >
-        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M6 3l5 5-5 5" />
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5.5 3.5L10 8l-4.5 4.5" />
         </svg>
         <span class="sr-only">下一页</span>
       </button>

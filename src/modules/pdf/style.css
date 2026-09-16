@@ -353,9 +353,9 @@
 .print-range{grid-column:1/-1}
 .print-file-bottom{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}
 .print-status{overflow-wrap:anywhere}
-.print-footer{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;padding:8px 0 2px;background:linear-gradient(transparent,var(--bg) 35%);margin-top:auto}
-.print-foot-note{margin-right:auto;font-size:11px;color:var(--muted)}
-.print-go{min-width:160px;height:32px;font-size:13px}
+.print-footer{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:10px;min-height:48px;padding:0 2px;margin-top:auto;background:var(--panel);border-top:1px solid var(--line)}
+.print-foot-note{margin-right:auto;font-size:12px;color:var(--muted);line-height:1.4}
+.print-go{min-width:148px;height:32px;font-size:13px;font-weight:600}
 .page-dims{margin-top:4px}
 .paper-dimensions{font-size:11px!important;margin:0;color:var(--muted)}
 .page-size-list{display:flex;flex-direction:column;gap:2px;max-height:96px;overflow:auto}
