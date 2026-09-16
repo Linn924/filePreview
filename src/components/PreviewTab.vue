@@ -85,25 +85,37 @@ async function loaded() {
 </script>
 <template>
   <section class="preview-tab" :data-file-id="file.id">
-    <div class="filebar">
+    <!-- Plan B: identity strip (type · name · size) -->
+    <div class="filebar idbar">
       <span class="badge">{{ file.ext.toUpperCase() }}</span>
       <div class="filename">
-        <strong :title="file.name">{{ file.name }}</strong
-        ><small>{{ fileSize(file.size) }}</small>
+        <strong :title="file.name">{{ file.name }}</strong>
       </div>
+      <small class="filesize">{{ fileSize(file.size) }}</small>
+    </div>
+    <!-- Plan B: action strip -->
+    <div class="filebar actbar">
       <FitControl
         v-if="!error && module?.pageFit"
         v-model="fitMode"
         @update:model-value="zoom = 100"
       />
+      <span class="sep" aria-hidden="true"></span>
       <ZoomControl v-if="!error" v-model="zoom" />
+      <span class="sep" aria-hidden="true"></span>
       <component
         v-if="module?.toolbar && !error"
         :is="module.toolbar"
         :file="file"
       />
-      <button class="immersive-toggle" @click="toggleFullscreen">
-        {{ immersive ? "退出全屏（Esc）" : "沉浸阅读（F11）" }}
+      <span class="flex-sp"></span>
+      <button
+        class="immersive-toggle"
+        type="button"
+        :title="immersive ? '退出全屏（Esc）' : '沉浸阅读（F11）'"
+        @click="toggleFullscreen"
+      >
+        {{ immersive ? "退出全屏" : "沉浸" }}
       </button>
     </div>
     <div v-if="error" class="error" role="alert">

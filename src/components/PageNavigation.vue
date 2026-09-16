@@ -7,7 +7,7 @@ function jump(event: Event) {
 </script>
 <template>
   <footer class="page-nav">
-    <span>{{ label }}</span>
+    <span v-if="label" class="page-nav-label">{{ label }}</span>
     <div>
       <button :disabled="current <= 1" @click="emit('jump', current - 1)">
         上一页</button

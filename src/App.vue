@@ -283,7 +283,7 @@ onBeforeUnmount(() => {
     @dragover.prevent
     @drop.prevent="drop"
   >
-    <header class="app-header">
+    <header v-if="!isPreview" class="app-header">
       <button
         class="settings-button"
         aria-label="设置"
@@ -333,7 +333,13 @@ onBeforeUnmount(() => {
           @dragover.prevent
           @drop.stop.prevent="dropTab($event, file.id)"
         >
-          <button :title="file.name" @click="selectTab(file.id)">
+          <i class="dot" :class="{ img: ['png','jpg','jpeg','webp','gif','bmp','svg'].includes(file.ext) }" aria-hidden="true"></i>
+          <button
+            class="tab-name"
+            :title="file.name"
+            :aria-label="file.name"
+            @click="selectTab(file.id)"
+          >
             {{ file.name }}</button
           ><button
             class="tab-close"
@@ -350,7 +356,19 @@ onBeforeUnmount(() => {
           aria-label="打开文件"
           @click="openFiles"
         >
-          + 打开
+          +
+        </button>
+        <button
+          type="button"
+          class="settings-button tab-settings"
+          aria-label="设置"
+          title="设置"
+          @click="showSettings = true"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.2" />
+            <path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" />
+          </svg>
         </button>
       </nav>
       <PreviewTab
