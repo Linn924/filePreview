@@ -20,8 +20,8 @@ type P = {
 };
 
 function burst(ctx: CanvasRenderingContext2D, w: number, h: number, ps: P[]) {
-  const cx = w * (0.28 + Math.random() * 0.44);
-  const cy = h * (0.22 + Math.random() * 0.28);
+  const cx = w * (0.2 + Math.random() * 0.6);
+  const cy = h * (0.12 + Math.random() * 0.22);
   const n = 18 + Math.floor(Math.random() * 10);
   const hue = 200 + Math.random() * 60;
   for (let i = 0; i < n; i++) {
@@ -64,7 +64,27 @@ function runIntro() {
     const w = root.clientWidth;
     const h = root.clientHeight;
     ctx.clearRect(0, 0, w, h);
-    if (frame % 55 === 0 && frame < 220) burst(ctx, w, h, ps);
+    // Burst in the upper band so the drop zone does not hide them.
+    if (frame % 50 === 0 && frame < 200) {
+      const cx = w * (0.2 + Math.random() * 0.6);
+      const cy = h * (0.12 + Math.random() * 0.22);
+      const n = 16 + Math.floor(Math.random() * 8);
+      const hue = 200 + Math.random() * 50;
+      for (let i = 0; i < n; i++) {
+        const a = (Math.PI * 2 * i) / n;
+        const sp = 0.7 + Math.random() * 1.3;
+        ps.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 0,
+          max: 44 + Math.random() * 20,
+          c: `hsla(${hue + i * 2}, 72%, 64%, 0.95)`,
+          s: 1.1 + Math.random(),
+        });
+      }
+    }
     for (let i = ps.length - 1; i >= 0; i--) {
       const p = ps[i];
       p.x += p.vx;
