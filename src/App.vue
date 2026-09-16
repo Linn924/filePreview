@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount, provide, ref, shallowRef, nextTick } from "
 import { useImmersive } from "./composables/useImmersive";
 import PreviewTab from "./components/PreviewTab.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import HomeIntro from "./components/HomeIntro.vue";
 import { defaults, type Settings, type PreviewFile } from "../shared/contracts";
 const isPreview = new URLSearchParams(location.search).has("preview");
 const immersive = useImmersive(isPreview);
@@ -286,19 +287,31 @@ onBeforeUnmount(() => {
       <button
         class="settings-button"
         aria-label="设置"
+        title="设置"
         @click="showSettings = true"
       >
-        ⚙
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+          <circle cx="8" cy="8" r="2.2" />
+          <path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" />
+        </svg>
       </button>
     </header>
     <section v-if="!isPreview" class="welcome">
+      <HomeIntro />
       <button class="dropzone" @click="select">
-        <span class="file-icon">↥</span><strong>拖入文件或点击打开</strong>
+        <span class="file-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M8 11V3M5 6l3-3 3 3M3 12.5h10" />
+          </svg>
+        </span>
+        <strong>打开文件</strong>
+        <span class="drop-hint">或将文件拖到此处</span>
       </button>
       <div class="formats">
         <span>Word</span><span>Excel</span><span>PowerPoint</span
         ><span>PDF</span><span>图片</span><span>文本</span>
       </div>
+      <p class="home-credit">By 仔仔</p>
     </section>
     <template v-else
       ><nav

@@ -215,8 +215,8 @@ function schedulePaint() {
   const hostRect = host.getBoundingClientRect();
   const nodes = Array.from(host.querySelectorAll<HTMLElement>(".thumb"));
   for (const node of nodes) {
-    const page = Number(node.dataset.page);
-    if (!Number.isFinite(page)) continue;
+    const page = Number(node.dataset.page) - 1;
+    if (!Number.isFinite(page) || page < 0) continue;
     const canvas = node.querySelector("canvas");
     if (!canvas) continue;
     if (paintedPages.has(page) && !canvasLooksBlank(canvas)) {
@@ -244,7 +244,7 @@ async function showThumbsAndPaint() {
   if (tab.value !== "thumbs") return;
   for (const i of visibleThumbs.value) {
     const node = thumbHost.value?.querySelector<HTMLElement>(
-      `.thumb[data-page="${i}"]`,
+      `.thumb[data-page="${i + 1}"]`,
     );
     const canvas = node?.querySelector("canvas");
     if (canvas && canvasLooksBlank(canvas)) paintedPages.delete(i);
@@ -348,7 +348,7 @@ const hasOutline = computed(() => outline.value.length > 0);
         v-for="i in visibleThumbs"
         :key="i"
         class="thumb"
-        :data-page="i"
+        :data-page="i + 1"
         :class="{ current: i + 1 === current }"
         role="button"
         tabindex="0"

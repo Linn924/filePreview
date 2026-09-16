@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>File Preview — 紧凑桌面工具原型（方案 B）</title>
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --panel: #ffffff;
+    --stage: #dce2ea;
+    --well: #f0f3f7;
+    --text: #20262e;
+    --muted: #5f6b7a;
+    --line: #c9d1db;
+    --accent: #0f6cbd;
+    --danger: #c42b1c;
+    --radius: 6px;
+    --font: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  html[data-theme="dark"] {
+    --bg: #1b1f27;
+    --panel: #252a32;
+    --stage: #12161c;
+    --well: #2c3340;
+    --text: #e8ecf2;
+    --muted: #9ba6b5;
+    --line: #3a4452;
+    --accent: #60a5fa;
+    --danger: #ff6b5a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--text);
+    background: #8a93a3;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .toolbar-demo {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar-demo button {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid #5a6472;
+    border-radius: 6px;
+    background: #2c3340;
+    color: #eee;
+    cursor: pointer;
+    font: inherit;
+  }
+  .toolbar-demo button.on { background: #0f6cbd; border-color: #0f6cbd; color: #fff; }
+  .frame {
+    width: min(980px, 100%);
+    height: min(640px, 85vh);
+    margin: 0 auto;
+    background: var(--bg);
+    border: 1px solid #5a6472;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 16px 40px rgb(0 0 0 / 25%);
+  }
+  .screen { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .screen.on { display: flex; }
+  button, select, input { font: inherit; color: var(--text); }
+  button {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    cursor: pointer;
+  }
+  button:hover { background: var(--well); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+  }
+  html[data-theme="dark"] button.primary { color: #0c1218; }
+  button.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  button.icon { width: 28px; padding: 0; display: inline-grid; place-items: center; }
+  .icon svg { width: 16px; height: 16px; display: block; }
+  /* Home */
+  .home-head {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 10px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .home-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: var(--bg);
+  }
+  .open-btn {
+    height: 40px;
+    padding: 0 28px;
+    font-size: 14px;
+  }
+  .drop-hint { color: var(--muted); font-size: 12px; }
+  .fmts { display: flex; gap: 10px; color: var(--muted); font-size: 11px; margin-top: 8px; }
+  /* Preview */
+  .tabs {
+    height: 36px;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    padding: 0 8px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+  .tab {
+    height: 32px;
+    max-width: 200px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px 0 10px;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .tab .dot.img { background: #0d9488; }
+  .tab span.name { overflow: hidden; text-overflow: ellipsis; }
+  .tab.active {
+    background: var(--bg);
+    border-color: var(--line);
+    color: var(--text);
+    box-shadow: inset 0 2px 0 var(--accent);
+    font-weight: 600;
+  }
+  .tab-add { margin-left: 4px; border: 1px dashed var(--line); background: transparent; color: var(--muted); height: 32px; }
+  .idbar {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .idbar .type {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+  .idbar .fname {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .actbar {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 10px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .actbar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 6px; }
+  .actbar .zoom {
+    width: 52px;
+    height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--well);
+    text-align: center;
+    color: var(--text);
+  }
+  .actbar .pagein {
+    width: 40px;
+    height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--well);
+    text-align: center;
+  }
+  .stage {
+    flex: 1;
+    min-height: 0;
+    background: var(--stage);
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    padding: 20px 16px;
+  }
+  .sheet {
+    width: min(420px, 90%);
+    background: #fff;
+    color: #111;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+    padding: 28px 32px;
+    font-size: 12px;
+    line-height: 1.6;
+    align-self: flex-start;
+  }
+  .sheet h1 { font-size: 16px; margin-bottom: 10px; color: #111; }
+  .sheet p { margin: 6px 0; color: #222; }
+  .pagebar {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  /* Print */
+  .pr-head {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .pr-head strong { font-size: 13px; }
+  .pr-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pr-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 10px 12px;
+  }
+  .pr-row { display: flex; align-items: center; gap: 8px; }
+  .pr-row .name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pr-sum { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .pr-detail {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .pr-detail label { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  .pr-detail select, .pr-detail input {
+    height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--well);
+    padding: 0 6px;
+  }
+  .pr-foot {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .pr-foot .note { flex: 1; font-size: 11px; color: var(--muted); }
+  /* Settings */
+  .st {
+    flex: 1;
+    padding: 16px 20px;
+    overflow: auto;
+  }
+  .st h2 { font-size: 15px; margin-bottom: 12px; }
+  .st-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .st-row select {
+    height: 28px;
+    min-width: 160px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--well);
+    padding: 0 8px;
+  }
+  .caption {
+    max-width: 980px;
+    margin: 12px auto 0;
+    color: #e8ecf2;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar-demo">
+    <strong style="color:#fff;margin-right:8px">原型</strong>
+    <button type="button" data-s="home" class="on">首页</button>
+    <button type="button" data-s="preview">预览</button>
+    <button type="button" data-s="print">打印</button>
+    <button type="button" data-s="settings">设置</button>
+    <span style="width:12px"></span>
+    <button type="button" id="themeBtn">切换黑夜</button>
+  </div>
+
+  <div class="frame" id="frame">
+    <!-- HOME -->
+    <div class="screen on" data-screen="home">
+      <div class="home-head">
+        <button type="button" class="icon ghost" title="设置" aria-label="设置" data-goto="settings">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"/></svg>
+        </button>
+      </div>
+      <div class="home-body">
+        <button type="button" class="primary open-btn" data-goto="preview">打开文件</button>
+        <div class="drop-hint">或将文件拖到此处</div>
+        <div class="fmts"><span>Word</span><span>Excel</span><span>PPT</span><span>PDF</span><span>图片</span><span>文本</span></div>
+      </div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div class="screen" data-screen="preview">
+      <div class="tabs">
+        <div class="tab active"><i class="dot"></i><span class="name">合同-最终版.pdf</span></div>
+        <div class="tab"><i class="dot"></i><span class="name">invoice_batch_2026Q3.pdf</span></div>
+        <div class="tab"><i class="dot img"></i><span class="name">scan_001.png</span></div>
+        <button type="button" class="tab-add">+</button>
+      </div>
+      <div class="idbar" title="合同-最终版.pdf">
+        <span class="type">PDF</span>
+        <span class="fname">合同-最终版.pdf</span>
+        <span>128 KB</span>
+      </div>
+      <div class="actbar">
+        <button type="button" class="icon" title="缩小">−</button>
+        <input class="zoom" value="100%" title="缩放倍率" />
+        <button type="button" class="icon" title="放大">+</button>
+        <span class="sep"></span>
+        <button type="button">适合宽度</button>
+        <button type="button">整页</button>
+        <button type="button">100%</button>
+        <span class="sep"></span>
+        <input class="pagein" value="2" aria-label="页码" />
+        <span style="color:var(--muted);font-size:12px">/ 12</span>
+        <span style="flex:1"></span>
+        <button type="button" class="icon" title="打印" data-goto="print">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 6V2h8v4M4 12H3a1 1 0 0 1-1-1V7h12v4a1 1 0 0 1-1 1h-1M4 10h8v4H4z"/></svg>
+        </button>
+        <button type="button" title="沉浸阅读">沉浸</button>
+      </div>
+      <div class="stage">
+        <div class="sheet">
+          <h1>采购合同（虚构）</h1>
+          <p>甲方：示例科技有限公司</p>
+          <p>乙方：演示文档供应商</p>
+          <p>第一条　标的与数量：文件预览组件许可若干套，详见附件。</p>
+          <p>第二条　交付：本合同为界面设计原型中的虚构内容，仅用于展示排版与舞台对比，不含真实业务数据。</p>
+          <p>第三条　验收：安装包可启动、可打开 PDF / Word / Excel 等格式。</p>
+        </div>
+      </div>
+      <div class="pagebar">
+        <button type="button" class="ghost">上一页</button>
+        <span>2 / 12</span>
+        <button type="button" class="ghost">下一页</button>
+      </div>
+    </div>
+
+    <!-- PRINT -->
+    <div class="screen" data-screen="print">
+      <div class="pr-head">
+        <strong>打印</strong>
+        <select style="height:28px;min-width:180px;border:1px solid var(--line);border-radius:6px;background:var(--well);padding:0 8px">
+          <option>ApeosPort C2560</option>
+          <option>Microsoft Print to PDF</option>
+        </select>
+        <span style="font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)">彩色</span>
+        <span style="font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)">双面?</span>
+        <span style="flex:1"></span>
+        <button type="button">并排查看</button>
+        <button type="button">系统打印机</button>
+      </div>
+      <div class="pr-body">
+        <div class="pr-card">
+          <div class="pr-row">
+            <input type="checkbox" checked />
+            <span class="name" title="合同-最终版.pdf">合同-最终版.pdf</span>
+            <span style="font-size:10px;color:var(--muted)">PDF</span>
+            <button type="button" class="ghost">↑</button>
+            <button type="button" class="ghost">↓</button>
+            <button type="button">移除</button>
+            <button type="button">收起</button>
+          </div>
+          <div class="pr-sum">A4 · 纵向 · 1 份 · 全部页 · 适合纸张</div>
+          <div class="pr-detail">
+            <label>纸张<select><option>A4</option><option>A5</option></select></label>
+            <label>方向<select><option>纵向</option><option>横向</option></select></label>
+            <label>份数<input value="1" /></label>
+            <label>单双面<select><option>单面</option><option>长边双面</option></select></label>
+            <label>颜色<select><option>彩色</option><option>黑白</option></select></label>
+            <label>缩放<select><option>适合纸张</option><option>实际大小</option><option>仅缩小</option></select></label>
+            <label>页序<select><option>顺序</option><option>逆序</option><option>奇数页</option><option>偶数页</option></select></label>
+            <label>页码<input placeholder="留空=全部" /></label>
+          </div>
+        </div>
+        <div class="pr-card">
+          <div class="pr-row">
+            <input type="checkbox" checked />
+            <span class="name">invoice_batch_2026Q3.pdf</span>
+            <span style="font-size:10px;color:var(--muted)">PDF</span>
+            <button type="button" class="ghost">↑</button>
+            <button type="button" class="ghost">↓</button>
+            <button type="button">移除</button>
+            <button type="button">设置</button>
+          </div>
+          <div class="pr-sum">A5 · 横向 · 2 份 · 1–3 · 仅缩小</div>
+        </div>
+      </div>
+      <div class="pr-foot">
+        <span class="note">提交后进入系统队列，是否出纸以队列为准</span>
+        <button type="button">添加文件</button>
+        <button type="button" class="primary">打印所选文件（2）</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen" data-screen="settings">
+      <div class="home-head" style="justify-content:space-between;padding:0 16px">
+        <strong>设置</strong>
+        <button type="button" data-goto="preview">关闭</button>
+      </div>
+      <div class="st">
+        <div class="st-row"><span>外观</span><select><option>白天</option><option>黑夜</option><option>跟随系统</option></select></div>
+        <div class="st-row"><span>关闭首页时</span><select><option>每次询问</option><option>退出软件</option><option>隐藏到托盘</option></select></div>
+        <div class="st-row"><span>同时打开多个文件</span><select><option>下次询问</option><option>标签切换</option><option>多个窗口</option></select></div>
+        <div class="st-row"><span>默认缩放</span><select><option>100%</option><option>适合宽度</option></select></div>
+        <div class="st-row"><span>预览窗口最大化</span><input type="checkbox" checked /></div>
+        <div class="st-row"><span>点击“打印”时列表</span><select><option>本窗口全部 PDF</option><option>仅当前文件</option><option>不自动加入</option></select></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    方案 B 原型：标签 36px · 身份条 28px · 操作条 36px · 页码 28px · 控件高 28px · 圆角 6px · Segoe UI。
+    文件色点仅示例；正式实现用内联 SVG 图标。文档白页不随主题变色。
+  </p>
+
+<script>
+  const buttons = document.querySelectorAll('.toolbar-demo [data-s]');
+  const screens = document.querySelectorAll('[data-screen]');
+  function show(id) {
+    screens.forEach((s) => s.classList.toggle('on', s.dataset.screen === id));
+    buttons.forEach((b) => b.classList.toggle('on', b.dataset.s === id));
+  }
+  buttons.forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+  document.querySelectorAll('[data-goto]').forEach((el) => {
+    el.addEventListener('click', () => show(el.dataset.goto));
+  });
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+  });
+</script>
+</body>
+</html>

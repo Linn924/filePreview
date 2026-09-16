@@ -1,33 +1,22 @@
 # DESIGN NOTES — File Preview
 
 ## Mode
-Existing-codebase + convention (desktop utility). Familiarity over flair.
+Existing-codebase + convention (Windows compact desktop tool). **方案 B**.
 
-## Direction
-Modular chrome: header / tabs / filebar / **document stage** / page-nav.
-Content is the hero; chrome stays quiet.
+## Tokens (Plan B)
+- Light: bg #F3F5F8 · panel #FFF · stage #DCE2EA · accent #0F6CBD · muted #5F6B7A
+- Dark: bg #1B1F27 · panel #252A32 · stage #12161C · accent #60A5FA
+- Control h 28px · radius 6px · tab bar 36 · filebar 36 · page-nav 28
+- Type: Segoe UI / Microsoft YaHei 11–13px
 
-## Palette (2026-09-15 refine — 注意配色)
-| Token | Light | Role |
-|-------|-------|------|
-| --bg | #EEF1F6 | 桌面底，冷灰 |
-| --panel | #FFFFFF | 工具条/面板 |
-| --stage | #E5EAF2 | 文档舞台（略深于 bg，衬白纸） |
-| --well | #F5F7FA | 悬停/弱底 |
-| --text | #1C2434 | 主文字（对比 ≥ 4.5 on panel） |
-| --muted | #5C6B7F | 次要文字 |
-| --line | #D9E0EA | 分隔线 |
-| --accent | #1F5F9E | 信任蓝，仅主操作/强调 |
-| --accent-soft | #E8F0F8 | 徽章/图标弱底 |
-| --danger | #B42318 | 错误 |
-
-Dark: bg #11171F · panel #1A222C · stage #0D1218 · accent #8BB8E8（深底上文字用 #0C1218）
-
-## Type
-Segoe UI / Microsoft YaHei / system-ui。11–16px。无网络字体。
+## Home
+- First-run intro (localStorage `fp-home-intro-v1`): soft fireworks +「小乖专属软件」
+- Credit **By 仔仔**
+- Primary「打开文件」+ drop hint + quiet format chips
+- `prefers-reduced-motion`: no intro animation
 
 ## Avoid
-霓虹蓝、大渐变、硬编码 hex 与 var 混用、无焦点环。
+Emoji icons (use inline SVG), tall empty headers, neon, mixed hex tokens.
 
 ## User preference
-简洁、可接受、模块化；类名勿改（测试依赖）。
+简洁 / 紧凑 / 模块化；**不破坏现有功能与测试类名**。
