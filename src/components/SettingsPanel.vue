@@ -100,7 +100,7 @@ const emit = defineEmits<{ close: []; change: [value: Partial<Settings>] }>();
         />
       </div>
       <div class="setting-row">
-        <label for="print-entry">点击“打印 PDF”时列表</label
+        <label for="print-entry">点击“打印”时列表</label
         ><select
           id="print-entry"
           :value="settings.printEntry"
@@ -111,7 +111,7 @@ const emit = defineEmits<{ close: []; change: [value: Partial<Settings>] }>();
             })
           "
         >
-          <option value="all">本窗口全部 PDF</option>
+          <option value="all">本窗口全部可打印文件</option>
           <option value="current">仅当前文件</option>
           <option value="none">不自动加入（手动添加）</option>
         </select>

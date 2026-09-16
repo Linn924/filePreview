@@ -396,29 +396,59 @@ main {
 }
 
 .icon-only-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  flex: 0 0 28px !important;
+  vertical-align: middle;
 }
 
-.icon-only-btn .btn-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.icon-text-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.icon-text-btn .btn-icon {
+.icon-only-btn .btn-icon,
+.btn-icon {
+  display: block;
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+  margin: 0 auto;
+}
+
+.icon-text-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  vertical-align: middle;
+}
+
+.icon-text-btn .btn-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.module-tools,
+.pdf-inline-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pdf-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.filebar.actbar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
 
 .sr-only {
@@ -825,7 +855,8 @@ main {
 /* —— Immersive: hide chrome; reveal strips at edges —— */
 .immersive .app-header,
 .immersive .tabs,
-.immersive .pdf-toolbar-row,
+.immersive .module-tools,
+.immersive .pdf-inline-tools,
 .immersive .pdf-nav,
 .immersive .filebar.idbar,
 .immersive .image-toolbar {

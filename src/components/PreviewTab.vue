@@ -103,6 +103,7 @@ async function loaded() {
       <span class="sep" aria-hidden="true"></span>
       <ZoomControl v-if="!error" v-model="zoom" />
       <span class="sep" aria-hidden="true"></span>
+      <span class="module-tools" :data-tools-for="file.id"></span>
       <component
         v-if="module?.toolbar && !error"
         :is="module.toolbar"

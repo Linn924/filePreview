@@ -9,9 +9,20 @@ async function open() {
   try {
     const { printEntry } = await window.localPreview.getSettings();
     let files: PreviewFile[] = [];
-    if (printEntry === "all")
-      files = (previewFiles?.value || []).filter((f) => f.ext === "pdf");
-    else if (printEntry === "current") files = [props.file];
+    if (printEntry === "all") {
+      const printable = new Set([
+        "pdf",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "gif",
+        "bmp",
+        "svg",
+        "docx",
+      ]);
+      files = (previewFiles?.value || []).filter((f) => printable.has(f.ext));
+    } else if (printEntry === "current") files = [props.file];
     await window.localPreview.openPrintPanel(files);
   } catch (e) {
     error.value = printError(e);

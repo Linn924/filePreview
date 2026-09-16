@@ -155,48 +155,53 @@ watch(
 </script>
 <template>
   <section class="pdf-pane">
-    <div class="pdf-toolbar-row" data-pdf-toolbar>
-      <PdfSearch
-        v-model:open="searchOpen"
-        :query="search.query.value"
-        :hits="search.hits.value"
-        :active="search.active.value"
-        :searching="search.searching.value"
-        :error="search.error.value"
-        @update:query="(v) => (search.query.value = v)"
-        @search="runSearch"
-        @next="search.next()"
-        @prev="search.prev()"
-        @clear="search.clear()"
-      />
-      <button
-        type="button"
-        class="pdf-nav-toggle icon-only-btn"
-        :aria-pressed="navOpen"
-        :title="navOpen ? '隐藏导航' : '目录 / 缩略图'"
-        aria-label="目录 / 缩略图"
-        @click="navOpen = !navOpen"
-      >
-        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
-          <rect x="2" y="3" width="5" height="10" rx="1" />
-          <path d="M9 4h5M9 8h5M9 12h5" />
-        </svg>
-        <span class="sr-only">{{ navOpen ? "隐藏导航" : "目录 / 缩略图" }}</span>
-      </button>
-      <button
-        type="button"
-        class="pdf-rotate icon-only-btn"
-        :title="'临时旋转（当前 ' + rotate + '°）'"
-        aria-label="旋转预览"
-        @click="cycleRotate"
-      >
-        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path d="M13 8a5 5 0 1 1-1.5-3.5" />
-          <path d="M13 2v3h-3" />
-        </svg>
-        <span class="sr-only">旋转 {{ rotate }}°</span>
-      </button>
-    </div>
+    <Teleport
+      :to="`[data-file-id='${props.file.id}'] .module-tools`"
+      defer
+    >
+      <span class="pdf-inline-tools" data-pdf-toolbar>
+        <PdfSearch
+          v-model:open="searchOpen"
+          :query="search.query.value"
+          :hits="search.hits.value"
+          :active="search.active.value"
+          :searching="search.searching.value"
+          :error="search.error.value"
+          @update:query="(v) => (search.query.value = v)"
+          @search="runSearch"
+          @next="search.next()"
+          @prev="search.prev()"
+          @clear="search.clear()"
+        />
+        <button
+          type="button"
+          class="pdf-nav-toggle icon-only-btn"
+          :aria-pressed="navOpen"
+          :title="navOpen ? '隐藏导航' : '目录 / 缩略图'"
+          aria-label="目录 / 缩略图"
+          @click="navOpen = !navOpen"
+        >
+          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <rect x="2" y="3" width="5" height="10" rx="1" />
+            <path d="M9 4h5M9 8h5M9 12h5" />
+          </svg>
+          <span class="sr-only">{{ navOpen ? "隐藏导航" : "目录 / 缩略图" }}</span>
+        </button>
+        <button
+          type="button"
+          class="pdf-rotate icon-only-btn"
+          :title="'临时旋转（当前 ' + rotate + '°）'"
+          aria-label="旋转预览"
+          @click="cycleRotate"
+        >
+          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M13 8a5 5 0 1 1-1.5-3.5" />
+            <path d="M13 2v3h-3" />
+          </svg>
+          <span class="sr-only">旋转 {{ rotate }}°</span>
+        </button>
+      </span>
+    </Teleport>
     <form
       v-if="needPassword"
       class="pdf-password"
