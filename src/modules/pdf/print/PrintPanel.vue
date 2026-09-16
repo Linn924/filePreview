@@ -210,15 +210,40 @@ const orderLabel = (o?: string) =>
             >
               {{ row.file.name }}</button
             ><span class="file-type-badge">{{ row.file.ext }}</span
-            ><button :disabled="busy || index === 0" @click="move(index, -1)">
-              ↑</button
             ><button
+              type="button"
+              class="icon-only-btn"
+              :disabled="busy || index === 0"
+              title="上移"
+              aria-label="上移"
+              @click="move(index, -1)"
+            >
+              <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <path d="M3 10l5-5 5 5" />
+              </svg></button
+            ><button
+              type="button"
+              class="icon-only-btn"
               :disabled="busy || index === files.length - 1"
+              title="下移"
+              aria-label="下移"
               @click="move(index, 1)"
             >
-              ↓</button
-            ><button :disabled="busy" @click="files.splice(index, 1)">
-              移除
+              <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <path d="M3 6l5 5 5-5" />
+              </svg></button
+            ><button
+              type="button"
+              class="icon-only-btn"
+              :disabled="busy"
+              title="移除"
+              aria-label="移除"
+              @click="files.splice(index, 1)"
+            >
+              <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M3 5h10M6 5V3.5h4V5M5 5l.5 8h5L11 5M7 7.5v4M9 7.5v4" />
+              </svg>
+              <span class="sr-only">移除</span>
             </button>
           </div>
           <div class="print-file-summary">
@@ -233,11 +258,23 @@ const orderLabel = (o?: string) =>
               </template>
             </span>
             <button
-              class="toggle-print-options"
+              type="button"
+              class="toggle-print-options icon-only-btn"
               :aria-expanded="row.expanded"
+              :title="row.expanded ? '收起设置' : '设置'"
+              :aria-label="row.expanded ? '收起设置' : '设置'"
               @click="row.expanded = !row.expanded"
             >
-              {{ row.expanded ? "收起" : "设置" }}
+              <svg v-if="row.expanded" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <path d="M3 6l5 5 5-5" />
+              </svg>
+              <svg v-else class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <path d="M3 5h10M3 8h10M3 11h10" />
+                <circle cx="6" cy="5" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="10" cy="8" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="7" cy="11" r="1.2" fill="currentColor" stroke="none" />
+              </svg>
+              <span class="sr-only">{{ row.expanded ? "收起" : "设置" }}</span>
             </button>
           </div>
           <div class="print-file-body">

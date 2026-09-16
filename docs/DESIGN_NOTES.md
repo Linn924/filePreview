@@ -9,8 +9,10 @@ Existing-codebase + convention (Windows compact desktop tool). **方案 B**。
 - Control 28px · radius 6px · tab bar 36 · fixed tab 168px · idbar 28 · actbar 36 · page-nav 28
 - Icons: inline SVG only (printer / gear / upload)
 
-## Home
-- Intro once (`fp-home-intro-v1`): fireworks in upper band + 「小乖专属软件」above dropzone
+## App icon
+**方案 1 文档眼** — 蓝底 `#0F6CBD`、白页、行线、右下预览镜。已生成 `assets/logo.png` + `assets/icon.ico`。
+
+## Home- Intro once (`fp-home-intro-v1`): fireworks in upper band + 「小乖专属软件」above dropzone
 - Credit **By 仔仔**
 - Dropzone semi-transparent so fireworks show around it
 
