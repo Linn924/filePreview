@@ -17,7 +17,7 @@ export function usePrintQueue(initial?: PreviewFile) {
     file,
     options: { ...printDefaults },
     selected: true,
-    expanded: true,
+    expanded: false,
     status: file.error || "等待",
   });
   const files = ref<PrintRow[]>(initial ? [row(initial)] : []),

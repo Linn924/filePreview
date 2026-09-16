@@ -110,6 +110,7 @@ const suite: Suite = async (c) => {
       "original and target dimensions shown",
       "document.querySelector('.paper-dimensions')?.textContent.includes('mm')",
     );
+    await c.click(win, ".toggle-print-options");
     await c.check(
       win,
       "paper layout preview canvas present",
@@ -176,6 +177,7 @@ const suite: Suite = async (c) => {
       "batch list contains two PDFs",
       "document.querySelectorAll('.print-files li').length===2",
     );
+    await c.click(win, ".print-files li:nth-child(2) .toggle-print-options");
     await c.evaluate(
       win,
       "(()=>{const row=document.querySelectorAll('.print-files li')[1];const n=row.querySelector('input[type=number]');n.value='2';n.dispatchEvent(new Event('input',{bubbles:true}));})()",
