@@ -134,9 +134,28 @@ const orderLabel = (o?: string) =>
       <header class="print-top">
         <h2>打印</h2>
         <div class="print-top-actions">
-          <button type="button" @click="arrange">并排查看</button>
-          <button type="button" class="open-print-queue" @click="openQueue">
-            系统打印机
+          <button
+            type="button"
+            class="icon-text-btn"
+            title="并排查看"
+            @click="arrange"
+          >
+            <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+              <rect x="2" y="3" width="5" height="10" rx="1" />
+              <rect x="9" y="3" width="5" height="10" rx="1" />
+            </svg>
+            <span>并排查看</span>
+          </button>
+          <button
+            type="button"
+            class="open-print-queue icon-text-btn"
+            title="系统打印机"
+            @click="openQueue"
+          >
+            <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+              <path d="M4 6V2h8v4M4 12H3a1 1 0 0 1-1-1V7h12v4a1 1 0 0 1-1 1h-1M4 10h8v4H4z" />
+            </svg>
+            <span>系统打印机</span>
           </button>
         </div>
       </header>

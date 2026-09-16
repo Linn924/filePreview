@@ -110,12 +110,19 @@ async function loaded() {
       />
       <span class="flex-sp"></span>
       <button
-        class="immersive-toggle"
+        class="immersive-toggle icon-only-btn"
         type="button"
         :title="immersive ? '退出全屏（Esc）' : '沉浸阅读（F11）'"
+        :aria-label="immersive ? '退出全屏' : '沉浸阅读'"
         @click="toggleFullscreen"
       >
-        {{ immersive ? "退出全屏" : "沉浸" }}
+        <svg v-if="immersive" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
+        </svg>
+        <svg v-else class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
+        </svg>
+        <span class="sr-only">{{ immersive ? "退出全屏" : "沉浸" }}</span>
       </button>
     </div>
     <div v-if="error" class="error" role="alert">

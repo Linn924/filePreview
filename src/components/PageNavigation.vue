@@ -9,8 +9,18 @@ function jump(event: Event) {
   <footer class="page-nav">
     <span v-if="label" class="page-nav-label">{{ label }}</span>
     <div>
-      <button :disabled="current <= 1" @click="emit('jump', current - 1)">
-        上一页</button
+      <button
+        type="button"
+        class="icon-only-btn"
+        :disabled="current <= 1"
+        title="上一页"
+        aria-label="上一页"
+        @click="emit('jump', current - 1)"
+      >
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <path d="M10 3L5 8l5 5" />
+        </svg>
+        <span class="sr-only">上一页</span></button
       ><label class="page-indicator"
         ><input
           aria-label="页码"
@@ -22,8 +32,18 @@ function jump(event: Event) {
           @keydown.enter="($event.target as HTMLInputElement).blur()"
         />
         / {{ total }}</label
-      ><button :disabled="current >= total" @click="emit('jump', current + 1)">
-        下一页
+      ><button
+        type="button"
+        class="icon-only-btn"
+        :disabled="current >= total"
+        title="下一页"
+        aria-label="下一页"
+        @click="emit('jump', current + 1)"
+      >
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <path d="M6 3l5 5-5 5" />
+        </svg>
+        <span class="sr-only">下一页</span>
       </button>
     </div>
   </footer>

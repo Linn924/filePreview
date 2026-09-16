@@ -26,12 +26,20 @@ function submit(event: Event) {
   <div class="pdf-search" :class="{ open }">
     <button
       type="button"
-      class="pdf-search-toggle"
+      class="pdf-search-toggle icon-only-btn"
       :aria-expanded="open"
-      title="搜索 PDF 文字"
+      :title="open ? '关闭搜索' : '搜索'"
+      aria-label="搜索"
       @click="emit('update:open', !open)"
     >
-      {{ open ? "关闭搜索" : "搜索" }}
+      <svg v-if="!open" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.5" />
+        <path d="M10.5 10.5L14 14" />
+      </svg>
+      <svg v-else class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M4 4l8 8M12 4l-8 8" />
+      </svg>
+      <span class="sr-only">{{ open ? "关闭搜索" : "搜索" }}</span>
     </button>
     <form v-if="open" class="pdf-search-bar" role="search" @submit="submit">
       <input
