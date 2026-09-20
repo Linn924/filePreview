@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import type { PreviewProps } from "../types";
 import { usePreview } from "./usePreview";
+import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 const props = defineProps<PreviewProps>();
 const emit = defineEmits<{
   ready: [];
@@ -15,10 +16,101 @@ const { pane, encoding, raw, pretty, invalidJson, html } = usePreview(
 const query = ref("");
 const showLines = ref(true);
 const showSearch = ref(false);
+const searchInput = ref<HTMLInputElement>();
+watch(showSearch, async value => { if (value) { await nextTick(); searchInput.value?.focus(); } });
 const lines = computed(() => (pretty.value || "").split("\n"));
+
+/** 超过此行数才启用虚拟滚动，小文件直接全量渲染 */
+const VIRTUAL_THRESHOLD = 3000;
+/** 视口外额外保留的行数（上下各一份） */
+const OVERSCAN = 5;
+
+const useVirtual = computed(() => lines.value.length > VIRTUAL_THRESHOLD);
+
+// ------- 虚拟滚动状态 -------
+const textScroll = ref<HTMLElement>();
+const vStart = ref(0);
+const vEnd = ref(VIRTUAL_THRESHOLD); // 初始先渲染前 N 行
+const padTop = ref(0);
+const padBottom = ref(0);
+
+/** 读取实际行高：优先取 DOM 真实值，fallback 到 zoom 比例估算 */
+function lineHeight(): number {
+  const el = textScroll.value?.querySelector<HTMLElement>(".text-line");
+  if (el && el.offsetHeight > 0) return el.offsetHeight;
+  return (14 * props.zoom) / 100 * 1.65;
+}
+
+function updateVirtual() {
+  if (!useVirtual.value) return;
+  const root = textScroll.value;
+  if (!root) return;
+  const lh = lineHeight();
+  const total = lines.value.length;
+  const viewH = root.clientHeight || 600;
+  const scrollY = root.scrollTop;
+
+  const firstVisible = Math.floor(scrollY / lh);
+  const lastVisible = Math.ceil((scrollY + viewH) / lh);
+
+  const start = Math.max(0, firstVisible - OVERSCAN);
+  const end = Math.min(total, lastVisible + OVERSCAN);
+
+  vStart.value = start;
+  vEnd.value = end;
+  padTop.value = start * lh;
+  padBottom.value = Math.max(0, (total - end) * lh);
+}
+
+// 当切换虚拟/非虚拟或 lines 变化时重置
+watch(useVirtual, async (on) => {
+  if (!on) {
+    vStart.value = 0;
+    vEnd.value = 0;
+    padTop.value = 0;
+    padBottom.value = 0;
+  } else {
+    await nextTick();
+    updateVirtual();
+  }
+});
+
+watch(lines, async () => {
+  if (!useVirtual.value) return;
+  // 编码切换后重置到顶部
+  if (textScroll.value) textScroll.value.scrollTop = 0;
+  vStart.value = 0;
+  await nextTick();
+  updateVirtual();
+});
+
+// zoom 变化时重算（行高改变）
+watch(() => props.zoom, async () => {
+  if (!useVirtual.value) return;
+  await nextTick();
+  updateVirtual();
+});
+
+let resizeObs: ResizeObserver | undefined;
+onMounted(() => {
+  if (useVirtual.value) updateVirtual();
+  resizeObs = createSafeResizeObserver(() => updateVirtual());
+  if (textScroll.value) resizeObs.observe(textScroll.value);
+});
+onBeforeUnmount(() => {
+  resizeObs?.disconnect();
+});
+
+/** 当前视口内实际渲染的行（小文件为全部，大文件为虚拟窗口） */
+const virtualLines = computed(() => {
+  if (!useVirtual.value) return lines.value;
+  return lines.value.slice(vStart.value, vEnd.value);
+});
+
 const hitCount = computed(() => {
   const q = query.value.trim().toLowerCase();
   if (!q) return 0;
+  // 始终基于全量 lines 统计，不受虚拟化影响
   return lines.value.reduce(
     (n, line) => n + (line.toLowerCase().includes(q) ? 1 : 0),
     0,
@@ -49,7 +141,7 @@ function highlightLine(line: string) {
   const ext = props.file.ext;
   if (ext === "json") {
     return esc(line)
-      .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (_m, str, colon) =>
+      .replace(/(\"(?:\\.|[^\"\\])*\")(\s*:)?/g, (_m, str, colon) =>
         colon
           ? `<span class="tok-key">${str}</span>${colon}`
           : `<span class="tok-str">${str}</span>`,
@@ -60,7 +152,7 @@ function highlightLine(line: string) {
   if (ext === "xml")
     return esc(line)
       .replace(/(&lt;\/?)([\w:.-]+)/g, '$1<span class="tok-key">$2</span>')
-      .replace(/("(?:[^"]*)")/g, '<span class="tok-str">$1</span>');
+      .replace(/(\"(?:[^\"]*)\")/g, '<span class="tok-str">$1</span>');
   if (ext === "js" || ext === "ts")
     return esc(line)
       .replace(/(\/\/.*$)/g, '<span class="tok-cmt">$1</span>')
@@ -68,7 +160,7 @@ function highlightLine(line: string) {
         /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|type|interface|new|try|catch|typeof)\b/g,
         '<span class="tok-kw">$1</span>',
       )
-      .replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g, '<span class="tok-str">$1</span>')
+      .replace(/(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g, '<span class="tok-str">$1</span>')
       .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
   if (ext === "css")
     return esc(line)
@@ -137,22 +229,32 @@ const showHtml = computed(
           </svg>
           <span class="sr-only">{{ showSearch ? "关闭搜索" : "搜索" }}</span>
         </button>
+      </span>
+    </Teleport>
+    <Teleport :to="`[data-file-id='${props.file.id}'] .search-tools`" defer>
+      <div v-if="showSearch" class="text-search-bar" role="search" @keydown.esc.prevent="showSearch=false">
+        <span class="search-caption">查找</span>
         <input
-          v-if="showSearch"
+          ref="searchInput"
           v-model="query"
           class="text-search-input"
           aria-label="搜索文本"
           placeholder="搜索"
         />
-        <span v-if="showSearch && query.trim()" class="text-search-count">
+        <span v-if="query.trim()" class="text-search-count" aria-live="polite">
           {{ hitCount }} 行
         </span>
-      </span>
+        <button type="button" class="search-close" aria-label="关闭文本搜索" title="关闭搜索（Esc）" @click="showSearch=false">关闭</button>
+      </div>
     </Teleport>
     <div v-if="invalidJson" class="notice">
       JSON 格式不完整，按原始文本显示。
     </div>
-    <div class="text-scroll">
+    <div
+      ref="textScroll"
+      class="text-scroll"
+      @scroll.passive="updateVirtual"
+    >
       <article
         v-if="showHtml"
         class="markdown preview-content"
@@ -166,17 +268,31 @@ const showHtml = computed(
         :class="{ 'with-lines': showLines }"
         :style="{ fontSize: (14 * zoom) / 100 + 'px' }"
       >
+        <!-- 虚拟滚动上方占位 -->
         <div
-          v-for="(line, i) in lines"
-          :key="i"
+          v-if="useVirtual && padTop > 0"
+          class="text-virtual-pad"
+          :style="{ height: padTop + 'px' }"
+          aria-hidden="true"
+        ></div>
+        <div
+          v-for="(line, i) in virtualLines"
+          :key="vStart + i"
           class="text-line"
-          :data-line="i + 1"
+          :data-line="vStart + i + 1"
         >
           <span v-if="showLines" class="line-no" aria-hidden="true">{{
-            i + 1
+            vStart + i + 1
           }}</span>
           <code class="line-body" v-html="markSearch(line) || '&nbsp;'"></code>
         </div>
+        <!-- 虚拟滚动下方占位 -->
+        <div
+          v-if="useVirtual && padBottom > 0"
+          class="text-virtual-pad"
+          :style="{ height: padBottom + 'px' }"
+          aria-hidden="true"
+        ></div>
       </div>
     </div>
   </section>

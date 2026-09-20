@@ -11,6 +11,12 @@ const suite: Suite = async (c) => {
     "text line numbers shown",
     "document.querySelectorAll('.line-no').length>0",
   );
+  // 行号应与 data-line 属性一致
+  await c.check(
+    text,
+    "text line-no matches data-line",
+    "(()=>{const lines=document.querySelectorAll('.text-line');return Array.from(lines).every((el,i)=>el.querySelector('.line-no')?.textContent.trim()===(parseInt(el.dataset.line||'0')).toString())})()",
+  );
   await c.click(text, ".text-search-toggle");
   await c.evaluate(
     text,
