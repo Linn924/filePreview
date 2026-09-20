@@ -223,12 +223,28 @@ async function save(value: Partial<Settings>) {
     error.value = "设置保存失败，请稍后重试。";
   }
 }
+function switchTabBy(delta: number) {
+  if (files.value.length < 2) return;
+  const i = files.value.findIndex((f) => f.id === active.value);
+  if (i < 0) return;
+  const next = (i + delta + files.value.length) % files.value.length;
+  tabAlignMode = "center";
+  active.value = files.value[next].id;
+  void alignActiveTab("center");
+}
 function key(event: KeyboardEvent) {
   if (event.ctrlKey && event.key.toLowerCase() === "o") {
     event.preventDefault();
     void openFiles();
+  } else if (event.ctrlKey && event.key.toLowerCase() === "w") {
+    event.preventDefault();
+    if (active.value) closeTab(active.value);
+  } else if (event.ctrlKey && event.key === "Tab") {
+    event.preventDefault();
+    switchTabBy(event.shiftKey ? -1 : 1);
+  } else if (event.key === "Escape") {
+    showSettings.value = false;
   }
-  if (event.key === "Escape") showSettings.value = false;
 }
 onMounted(async () => {
   window.addEventListener("keydown", key);

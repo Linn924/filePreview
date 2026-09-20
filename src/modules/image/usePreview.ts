@@ -3,6 +3,71 @@ import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import DOMPurify from "dompurify";
 import type { PreviewProps, PreviewEmit } from "../types";
+
+/**
+ * 从 JPEG 字节中读取 EXIF Orientation 标签（0x0112）。
+ * 返回值 1=正常, 3=180°, 6=90°CW, 8=90°CCW；其余或解析失败返回 1。
+ */
+function readJpegOrientation(bytes: Uint8Array): number {
+  // JPEG SOI
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return 1;
+  let pos = 2;
+  while (pos + 3 < bytes.length) {
+    if (bytes[pos] !== 0xff) break;
+    const marker = bytes[pos + 1];
+    const segLen = (bytes[pos + 2] << 8) | bytes[pos + 3];
+    // APP1 marker = 0xE1
+    if (marker === 0xe1 && segLen >= 6) {
+      // Check "Exif\0\0"
+      const hdr = String.fromCharCode(
+        bytes[pos + 4], bytes[pos + 5], bytes[pos + 6],
+        bytes[pos + 7], bytes[pos + 8], bytes[pos + 9],
+      );
+      if (hdr === "Exif\0\0") {
+        const tiff = pos + 10;
+        // Byte order: "II" (little-endian) or "MM" (big-endian)
+        const le =
+          bytes[tiff] === 0x49 && bytes[tiff + 1] === 0x49;
+        const read16 = (o: number) =>
+          le
+            ? bytes[tiff + o] | (bytes[tiff + o + 1] << 8)
+            : (bytes[tiff + o] << 8) | bytes[tiff + o + 1];
+        const read32 = (o: number) =>
+          le
+            ? bytes[tiff + o] |
+              (bytes[tiff + o + 1] << 8) |
+              (bytes[tiff + o + 2] << 16) |
+              (bytes[tiff + o + 3] << 24)
+            : (bytes[tiff + o] << 24) |
+              (bytes[tiff + o + 1] << 16) |
+              (bytes[tiff + o + 2] << 8) |
+              bytes[tiff + o + 3];
+        const ifd0 = read32(4);
+        const count = read16(ifd0);
+        for (let i = 0; i < count; i++) {
+          const entry = ifd0 + 2 + i * 12;
+          if (read16(entry) === 0x0112) {
+            // Orientation tag found; value is SHORT (type=3)
+            return read16(entry + 8);
+          }
+        }
+      }
+    }
+    // End-of-image or not an APP segment we care about
+    if (marker === 0xda || marker === 0xd9) break;
+    pos += 2 + segLen;
+  }
+  return 1;
+}
+
+/** EXIF Orientation → 顺时针旋转角度 */
+function orientationToDegrees(orientation: number): 0 | 90 | 180 | 270 {
+  if (orientation === 3) return 180;
+  if (orientation === 6) return 90;
+  if (orientation === 8) return 270;
+  return 0;
+}
+
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const pane = ref<HTMLElement>();
   const types: Record<string, string> = {
@@ -27,7 +92,14 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const dimensions = ref("");
   const natural = ref({ width: 0, height: 0 });
   const available = ref({ width: 0, height: 0 });
-  const rotate = ref<0 | 90 | 180 | 270>(0);
+
+  // 自动从 EXIF 读取初始方向（仅 JPEG）
+  const exifDeg =
+    props.file.ext === "jpg" || props.file.ext === "jpeg"
+      ? orientationToDegrees(readJpegOrientation(props.file.bytes))
+      : 0;
+  const rotate = ref<0 | 90 | 180 | 270>(exifDeg);
+
   const originalPixels = ref(false);
   let observer: ResizeObserver | undefined;
   onMounted(() => {

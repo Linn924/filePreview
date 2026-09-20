@@ -68,11 +68,31 @@ function highlightActiveHit() {
   const hit = activeHit.value;
   if (!hit) return;
   void nextTick().then(() => {
-    const el = scroll.value?.querySelector<HTMLElement>(
+    // 先清除上一个活跃高亮
+    scroll.value
+      ?.querySelectorAll(".pdf-page.is-active-hit")
+      .forEach((el) => el.classList.remove("is-active-hit"));
+    const pageEl = scroll.value?.querySelector<HTMLElement>(
       `.pdf-page[data-page="${hit.page - 1}"]`,
     );
-    el?.classList.add("is-active-hit");
-    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!pageEl) return;
+    pageEl.classList.add("is-active-hit");
+
+    // 尝试在文本层中找到命中 span 并精确定位
+    const layer = pageEl.querySelector<HTMLElement>(".pdf-text-layer");
+    if (layer?.dataset.built === "1") {
+      const needle = search.query.value.trim().toLowerCase();
+      const spans = Array.from(layer.querySelectorAll<HTMLElement>("span"));
+      const hitSpan = spans.find((s) =>
+        s.textContent?.toLowerCase().includes(needle),
+      );
+      if (hitSpan) {
+        hitSpan.scrollIntoView({ block: "center", behavior: "smooth" });
+        return;
+      }
+    }
+    // fallback：滚动到页面顶部
+    pageEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
 }
 function buildTextLayer(pageEl: HTMLElement, index: number) {
@@ -161,6 +181,7 @@ watch(
     >
       <span class="pdf-inline-tools" data-pdf-toolbar>
         <PdfSearch
+          :target="`[data-file-id='${props.file.id}'] .search-tools`"
           v-model:open="searchOpen"
           :query="search.query.value"
           :hits="search.hits.value"

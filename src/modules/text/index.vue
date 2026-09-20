@@ -153,7 +153,15 @@ function highlightLine(line: string) {
       .replace(/([.#][\w-]+)/g, '<span class="tok-key">$1</span>')
       .replace(/(#[0-9a-fA-F]{3,8})\b/g, '<span class="tok-num">$1</span>')
       .replace(/(:\s*[\w-]+)/g, '<span class="tok-str">$1</span>');
-  if (ext === "ini" || ext === "toml")
+  if (ext === "toml")
+    return esc(line)
+      .replace(/(^\s*#.*$)/g, '<span class="tok-cmt">$1</span>')
+      .replace(/^(\s*\[\[?[^\]]+\]?\])/, '<span class="tok-key">$1</span>')
+      .replace(/^(\s*[\w.-]+)(\s*=)/, '$1<span class="tok-kw">$2</span>')
+      .replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g, '<span class="tok-str">$1</span>')
+      .replace(/(:\s*|\s*=\s*)(true|false)\b/gi, '$1<span class="tok-kw">$2</span>')
+      .replace(/\b(-?\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
+  if (ext === "ini")
     return esc(line)
       .replace(/(^\s*[#;].*$)/g, '<span class="tok-cmt">$1</span>')
       .replace(/^(\s*\[[^\]]+\])/, '<span class="tok-key">$1</span>')
