@@ -242,7 +242,15 @@ onMounted(async () => {
     applyTheme();
   });
   cleanups.push(window.localPreview.onRemove(closeTab));
-  cleanups.push(window.localPreview.onPreviewPrintFile(file=>{if(!files.value.some(f=>f.id===file.id))files.value=[...files.value,file];active.value=file.id;tabAlignMode="center";void alignActiveTab("center");}));
+  cleanups.push(
+    window.localPreview.onPreviewPrintFile((file) => {
+      if (!files.value.some((f) => f.id === file.id))
+        files.value = [...files.value, file];
+      active.value = file.id;
+      tabAlignMode = "center";
+      void alignActiveTab("center");
+    }),
+  );
   cleanups.push(
     window.localPreview.onExport((id) => {
       const file = files.value.find((f) => f.id === id);
@@ -375,10 +383,9 @@ onBeforeUnmount(() => {
         </button>
       </nav>
       <PreviewTab
-        v-for="file in files"
-        v-show="file.id === active"
-        :key="file.id"
-        :file="file"
+        v-if="files.some((file) => file.id === active)"
+        :key="active"
+        :file="files.find((file) => file.id === active)!"
         :initial-zoom="settings.defaultZoom"
         :immersive="immersive"
     /></template>

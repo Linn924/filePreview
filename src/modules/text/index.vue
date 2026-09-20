@@ -3,6 +3,7 @@ import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue"
 import type { PreviewProps } from "../types";
 import { usePreview } from "./usePreview";
 import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
+import textModule from "./index";
 const props = defineProps<PreviewProps>();
 const emit = defineEmits<{
   ready: [];
@@ -116,23 +117,7 @@ const hitCount = computed(() => {
     0,
   );
 });
-const isCode = computed(() =>
-  [
-    "json",
-    "xml",
-    "log",
-    "txt",
-    "text",
-    "md",
-    "js",
-    "ts",
-    "css",
-    "ini",
-    "yaml",
-    "yml",
-    "toml",
-  ].includes(props.file.ext),
-);
+const isCode = computed(() => textModule.extensions.includes(props.file.ext));
 function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 }

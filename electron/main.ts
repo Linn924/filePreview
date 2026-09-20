@@ -15,7 +15,7 @@ import {
 } from "electron";
 import path from "node:path";
 import { SettingsStore } from "./settings";
-import { readPreviewFile, fileArguments } from "./files";
+import { preparePreviewFile, loadPreparedFile, fileArguments } from "./files";
 import { createLocalSession, protectWindow, trusted } from "./security";
 import {
   extensions,
@@ -195,7 +195,7 @@ export async function openPaths(paths: string[], mode?: "tabs" | "windows") {
   const created: BrowserWindow[] = [];
   for (const group of groups) {
     const files: PreviewFile[] = [];
-    for (const name of group) files.push(await readPreviewFile(name));
+    for (const name of group) files.push(await preparePreviewFile(name));
     const win = createWindow(true);
     payloads.set(win.webContents.id, files);
     await win.loadURL("preview://local/index.html?preview=1");
@@ -243,7 +243,12 @@ export const ready = owner
       setupFullscreen();
       local = await createLocalSession(path.resolve(__dirname, "../dist"));
       setupPrinting(local);
-      setupPrintWindow(local,async files=>{const win=createWindow(true);payloads.set(win.webContents.id,files);await win.loadURL("preview://local/index.html?preview=1");return win;});
+      setupPrintWindow(local, async (files) => {
+        const win = createWindow(true);
+        payloads.set(win.webContents.id, files);
+        await win.loadURL("preview://local/index.html?preview=1");
+        return win;
+      });
       ipcMain.handle("preview:select", async (event) => {
         trusted(event);
         const win = BrowserWindow.fromWebContents(event.sender);
@@ -276,7 +281,7 @@ export const ready = owner
         if (result.canceled || !result.filePaths.length) return [];
         const files: PreviewFile[] = [];
         for (const name of result.filePaths)
-          files.push(await readPreviewFile(name));
+          files.push(await preparePreviewFile(name));
         registerFiles(event.sender.id, files);
         return files;
       });
@@ -296,6 +301,7 @@ export const ready = owner
         payloads.delete(event.sender.id);
         return value;
       });
+      ipcMain.handle('preview:load',async(event,file:PreviewFile)=>{trusted(event);return loadPreparedFile(file);});
       ipcMain.on("preview:close", (event) => {
         const win = BrowserWindow.fromWebContents(event.sender);
         if (win) closePreview(win);

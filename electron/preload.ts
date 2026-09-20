@@ -1,14 +1,30 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge, Settings } from "../shared/contracts";
+
 const bridge: DesktopBridge = {
-  openPrintPanel:files=>ipcRenderer.invoke("print:open-panel",files),
-  printPanelFiles:()=>ipcRenderer.invoke("print:panel-files"),
-  onPrintIncoming:handler=>{ipcRenderer.on("print:incoming",handler);return()=>ipcRenderer.removeListener("print:incoming",handler)},
-  previewPrintFile:file=>ipcRenderer.invoke("print:preview-file",file),
-  onPreviewPrintFile:handler=>{const listener=(_e:Electron.IpcRendererEvent,file:import("../shared/contracts").PreviewFile)=>handler(file);ipcRenderer.on("print:preview-file",listener);return()=>ipcRenderer.removeListener("print:preview-file",listener)},
-  arrangePrintWindows:()=>ipcRenderer.invoke("print:arrange"),
-  printPanelBusy:value=>ipcRenderer.send("print:panel-busy",value),
-  dropPrintPdfs:files=>ipcRenderer.invoke("print:drop",files.map(file=>webUtils.getPathForFile(file))),
+  loadPreview: (file) => ipcRenderer.invoke("preview:load", file),
+  openPrintPanel: (files) => ipcRenderer.invoke("print:open-panel", files),
+  printPanelFiles: () => ipcRenderer.invoke("print:panel-files"),
+  onPrintIncoming: (handler) => {
+    ipcRenderer.on("print:incoming", handler);
+    return () => ipcRenderer.removeListener("print:incoming", handler);
+  },
+  previewPrintFile: (file) => ipcRenderer.invoke("print:preview-file", file),
+  onPreviewPrintFile: (handler) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      file: import("../shared/contracts").PreviewFile,
+    ) => handler(file);
+    ipcRenderer.on("print:preview-file", listener);
+    return () => ipcRenderer.removeListener("print:preview-file", listener);
+  },
+  arrangePrintWindows: () => ipcRenderer.invoke("print:arrange"),
+  printPanelBusy: (value) => ipcRenderer.send("print:panel-busy", value),
+  dropPrintPdfs: (files) =>
+    ipcRenderer.invoke(
+      "print:drop",
+      files.map((file) => webUtils.getPathForFile(file)),
+    ),
   printers: () => ipcRenderer.invoke("print:printers"),
   openPrintQueue: () => ipcRenderer.invoke("print:open-queue"),
   selectPrintPdfs: () => ipcRenderer.invoke("print:select"),
@@ -56,4 +72,5 @@ const bridge: DesktopBridge = {
     return () => ipcRenderer.removeListener("settings:changed", listener);
   },
 };
+
 contextBridge.exposeInMainWorld("localPreview", bridge);

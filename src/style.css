@@ -63,6 +63,7 @@ input {
 }
 
 button {
+  white-space: nowrap;
   height: var(--ctl-h);
   min-width: var(--ctl-h);
   padding: 0 10px;
@@ -368,16 +369,6 @@ main {
   user-select: none;
 }
 
-.tab .tab-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: inherit;
-  background: transparent;
-}
 
 .tab:not(.active):hover {
   background: var(--well);
@@ -477,8 +468,8 @@ main {
 }
 
 .filebar.actbar {
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 .sr-only {
@@ -595,10 +586,18 @@ main {
 }
 
 .filebar.actbar {
-  height: 36px;
+  min-height: 36px;
+  height: auto;
   gap: 4px;
-  padding: 0 10px;
+  padding: 4px 10px;
 }
+
+.filebar.actbar > :not(.flex-sp) { flex-shrink: 0; }
+.filebar.actbar > .module-tools:empty { display:none; }
+.search-tools { flex-shrink:0; min-width:0; background:var(--panel); }
+.search-tools:has(> *) { border-bottom:1px solid var(--line); }
+.search-caption { color:var(--muted); font-size:12px; white-space:nowrap; }
+.search-close { margin-left:auto; }
 
 .filebar .sep {
   width: 1px;
@@ -633,7 +632,7 @@ main {
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
-  max-width: min(420px, 55vw);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -647,12 +646,14 @@ main {
 }
 
 .zoom-control {
+  flex-shrink:0;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
 .zoom-control button {
+  flex-shrink:0;
   height: 28px;
   min-width: 28px;
   padding: 0 8px;
@@ -886,6 +887,8 @@ main {
 .immersive .app-header,
 .immersive .tabs,
 .immersive .module-tools,
+.immersive .search-tools,
+.immersive .sheet-tools,
 .immersive .pdf-inline-tools,
 .immersive .pdf-nav,
 .immersive .filebar.idbar,
