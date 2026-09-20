@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, toRaw } from "vue";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { PreviewFile } from "../../../../shared/contracts";
@@ -37,7 +37,9 @@ async function draw() {
   try {
     GlobalWorkerOptions.workerSrc = workerUrl;
     void loading?.destroy();
-    loading = getDocument({ data: props.file.bytes.slice() });
+    const source=await window.localPreview.loadPreview(toRaw(props.file));
+    if(disposed||source.error)return;
+    loading = getDocument({ data: source.bytes.slice() });
     const pdf = await loading.promise;
     if (disposed) return;
     const ranged = selectedPages(props.options.range || "", pdf.numPages);

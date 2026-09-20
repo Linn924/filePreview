@@ -15,6 +15,7 @@ const suite: Suite = async (c) => {
       "file picker accepts more than twelve files",
       "document.querySelectorAll('.tab').length===13",
     );
+    await c.check(tabs,'only the active file mounts a preview',"document.querySelectorAll('.preview-tab').length===1");
     c.close(tabs);
     const windows = await c.program.openPaths(
       Array(26).fill(c.fixture("text.txt")),

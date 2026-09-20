@@ -22,6 +22,9 @@ const {
 let incomingCleanup: (() => void) | undefined;
 let themeCleanup: (() => void) | undefined;
 const pending: PreviewFile[] = [];
+const visibleCount=ref(40);
+const visibleRows=computed(()=>files.value.slice(0,visibleCount.value));
+function extendRows(event:Event){const box=event.target as HTMLElement;if(box.scrollTop+box.clientHeight>=box.scrollHeight-280&&visibleCount.value<files.value.length)visibleCount.value=Math.min(files.value.length,visibleCount.value+40);}
 async function receive() {
   const incoming = await window.localPreview.printPanelFiles();
   if (busy.value) pending.push(...incoming);
@@ -190,9 +193,9 @@ const orderLabel = (o?: string) =>
         <button type="button" class="primary" @click="choose">添加文件</button>
       </div>
 
-      <ol v-else class="print-files">
+      <ol v-else class="print-files" @scroll.passive="extendRows">
         <li
-          v-for="(row, index) in files"
+          v-for="(row, index) in visibleRows"
           :key="row.file.id"
           class="print-file-card"
         >
@@ -280,6 +283,7 @@ const orderLabel = (o?: string) =>
           <div class="print-file-body">
             <div class="print-side">
               <PaperPreview
+                v-if="row.expanded"
                 class="print-paper-preview"
                 :file="row.file"
                 :options="row.options"

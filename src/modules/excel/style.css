@@ -21,6 +21,7 @@
   flex-shrink: 0;
 }
 .sheets button {
+  flex-shrink:0;
   height: 28px;
   border: 1px solid transparent;
   white-space: nowrap;
@@ -97,7 +98,7 @@
   padding: 5px 10px;
 }
 .excel {
-  margin: 16px 20px;
+  margin: 0;
 }
 .sheet-surface {
   position: relative;
@@ -212,12 +213,26 @@
   border-color: var(--line);
   color: var(--muted);
 }
+.sheet-tools {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px 12px;
+  padding:4px 10px;
+  background:var(--panel);
+  border-bottom:1px solid var(--line);
+  flex-shrink:0;
+}
+.sheet-tools label { flex-shrink:0; }
+.locate-status { flex-basis:100%; color:var(--muted); }
+.sheet-tools input:not([type="checkbox"]) { height:28px; border:1px solid var(--line); border-radius:var(--radius); background:var(--well); }
+.sheet-footer { height:auto!important; min-height:36px!important; padding:4px 10px!important; }
 .cell-locate {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  margin-left: auto;
+  margin-right: auto;
 }
 .cell-locate-input {
   width: 72px;

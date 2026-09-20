@@ -16,7 +16,7 @@ export function registerFiles(sender: number, files: PreviewFile[]) {
   for (const file of files) owners.set(file.id, sender);
 }
 export function releaseWindow(sender: number) {
-  for (const [id, owner] of owners) if (owner === sender) owners.delete(id);
+  for (const [id, owner] of owners) if (owner === sender)owners.delete(id);
   for (const [id, p] of pending)
     if (p.source === sender || p.target === sender) {
       clearTimeout(p.timer);
@@ -62,6 +62,6 @@ export function setupTransfers() {
     webContents.fromId(p.source)?.send("tabs:remove", id);
   });
   ipcMain.on("tabs:release", (event, id: string) => {
-    if (owners.get(id) === event.sender.id) owners.delete(id);
+    if (owners.get(id) === event.sender.id)owners.delete(id);
   });
 }

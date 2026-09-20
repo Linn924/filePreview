@@ -1,4 +1,12 @@
 import assert from "node:assert/strict";
+import {preparePreviewFile,loadPreparedFile} from '../electron/files';
+import {resolve} from 'node:path';
+const lazyText=await preparePreviewFile(resolve('work/fixtures/text.txt'));
+assert.equal(lazyText.bytes.byteLength,0,'a chosen file should not occupy byte memory before preview');
+const openedText=await loadPreparedFile(lazyText);
+assert.equal(openedText.id,lazyText.id);
+assert.ok(openedText.bytes.byteLength>0,'opening the active tab should load the content');
+assert.equal(lazyText.bytes.byteLength,0,'metadata must not retain the loaded copy');
 import { previewError } from '../shared/previewError';
 assert.match(previewError({name:'PasswordException'}, 'PDF'), /密码保护/);
 assert.match(previewError({code:'ENOENT'}, '文件'), /移动或删除/);

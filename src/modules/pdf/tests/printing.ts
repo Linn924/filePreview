@@ -172,6 +172,7 @@ const suite: Suite = async (c) => {
       filePaths: [c.fixture("document.pdf")],
     })) as typeof dialog.showOpenDialog;
     await c.click(win, ".pdf-print-panel footer button", "添加文件");
+    await c.check(win,'collapsed files do not render paper previews',"document.querySelectorAll('.print-file-card .print-paper-preview').length<=1");
     await c.check(
       win,
       "batch list contains two PDFs",
@@ -302,6 +303,11 @@ const suite: Suite = async (c) => {
       "document.querySelector('.filename').textContent.includes('document.pdf')",
     );
     c.close(reopened);
+    dialog.showOpenDialog = (async () => ({canceled:false,filePaths:Array(60).fill(c.fixture('document.pdf'))})) as typeof dialog.showOpenDialog;
+    await c.click(win,'.pdf-print-panel footer button','添加文件');
+    await c.check(win,'print list keeps DOM bounded',"document.querySelectorAll('.print-file-card').length<=40");
+    await c.evaluate(win,"(()=>{const list=document.querySelector('.print-files');list.scrollTop=list.scrollHeight;list.dispatchEvent(new Event('scroll'))})()");
+    await c.check(win,'long print list loads later rows',"document.querySelectorAll('.print-file-card').length>40");
     c.close(win);
     const text = await c.open("text.txt");
     await c.check(

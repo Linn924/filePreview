@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, shell, type Session } from "electron";
 import path from "node:path";
 import { trusted, protectWindow } from "../security";
-import { readPreviewFile } from "../files";
+import { preparePreviewFile,loadPreparedFile } from "../files";
 import { validatePrintOptions, type PdfPrintJob } from "../../shared/printing";
 interface ActiveJob {
   owner: number;
@@ -16,7 +16,7 @@ let queue = Promise.resolve();
 export function setupPrinting(local: Session) {
   ipcMain.handle("print:drop",async(event,paths:unknown)=>{trusted(event);if(!Array.isArray(paths)||paths.some(p=>typeof p!=="string"||!path.isAbsolute(p)))throw Error("请只拖入本机文件。");
     const allowed=new Set(["pdf","png","jpg","jpeg","webp","gif","bmp","svg","docx"]);
-    const files=[];for(const name of paths){const ext=path.extname(name).slice(1).toLowerCase();if(!allowed.has(ext))throw Error("支持 PDF、图片和 DOCX。");files.push(await readPreviewFile(name));}return files;});
+    const files=[];for(const name of paths){const ext=path.extname(name).slice(1).toLowerCase();if(!allowed.has(ext))throw Error("支持 PDF、图片和 DOCX。");files.push(await preparePreviewFile(name));}return files;});
   ipcMain.handle("print:printers", async (event) => {
     trusted(event);
     const list = await event.sender.getPrintersAsync();
@@ -60,14 +60,14 @@ export function setupPrinting(local: Session) {
     );
     if (result.canceled) return [];
     const files=[];
-    for(const path of result.filePaths)files.push(await readPreviewFile(path));
+    for(const path of result.filePaths)files.push(await preparePreviewFile(path));
     return files;
   });
   const printable = new Set(["pdf", "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "docx"]);
   ipcMain.handle("print:submit", async (event, value: PdfPrintJob) => {
     trusted(event);
     const options = validatePrintOptions(value?.options);
-    const file = value?.file;
+    const file = value?.file && await loadPreparedFile(value.file);
     if (
       !file ||
       !printable.has(file.ext) ||

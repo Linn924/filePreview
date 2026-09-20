@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import {nextTick,ref,watch} from 'vue';
 import type { SearchHit } from "./useSearch";
 
-defineProps<{
+const props=defineProps<{
+  target:string;
   query: string;
   hits: SearchHit[];
   active: number;
@@ -9,6 +11,8 @@ defineProps<{
   error: string;
   open: boolean;
 }>();
+const input=ref<HTMLInputElement>();
+watch(()=>props.open,async value=>{if(value){await nextTick();input.value?.focus();}});
 const emit = defineEmits<{
   "update:query": [string];
   search: [];
@@ -41,8 +45,11 @@ function submit(event: Event) {
       </svg>
       <span class="sr-only">{{ open ? "关闭搜索" : "搜索" }}</span>
     </button>
-    <form v-if="open" class="pdf-search-bar" role="search" @submit="submit">
+    <Teleport :to="target" defer>
+    <form v-if="open" class="pdf-search-bar" role="search" @submit="submit" @keydown.esc.prevent="emit('update:open',false)">
+      <span class="search-caption">查找</span>
       <input
+        ref="input"
         class="pdf-search-input"
         :value="query"
         placeholder="在文档中搜索文字"
@@ -108,6 +115,8 @@ function submit(event: Event) {
         <span class="sr-only">清除</span>
       </button>
       <span v-if="error" class="pdf-search-error" role="alert">{{ error }}</span>
+      <button type="button" class="search-close" aria-label="关闭文档搜索" title="关闭搜索（Esc）" @click="emit('update:open',false)">关闭</button>
     </form>
+    </Teleport>
   </div>
 </template>

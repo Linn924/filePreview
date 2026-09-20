@@ -100,6 +100,7 @@ export function normalizeSettings(
   };
 }
 export interface DesktopBridge {
+  loadPreview(file:PreviewFile):Promise<PreviewFile>;
   openPrintPanel(files:PreviewFile[]):Promise<void>;
   printPanelFiles():Promise<PreviewFile[]>;
   onPrintIncoming(handler:()=>void):()=>void;

@@ -65,6 +65,8 @@ async function locate() {
       >
         {{ name }}
       </button>
+    </nav>
+    <div class="sheet-tools" role="toolbar" aria-label="表格定位与冻结">
       <label class="cell-locate"
         >定位<input
           v-model="locateRef"
@@ -74,7 +76,7 @@ async function locate() {
           @keydown.enter.prevent="locate"
         />
         <button type="button" @click="locate">跳转</button>
-        <small v-if="locateMsg">{{ locateMsg }}</small></label
+        </label
       >
       <label class="freeze-toggle"
         ><input v-model="freezeFirstRow" type="checkbox" /> 首行</label
@@ -99,7 +101,8 @@ async function locate() {
           aria-label="额外冻结列数"
       /></label
       >
-    </nav>
+      <small v-if="locateMsg" class="locate-status" role="status">{{ locateMsg }}</small>
+    </div>
     <div ref="scroll" class="table-wrap" @scroll.passive="onScroll">
       <div
         v-if="rows.length"

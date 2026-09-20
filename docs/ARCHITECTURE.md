@@ -1,5 +1,9 @@
 # 架构
 
+## 按需文件加载与打印列表
+
+文件选择阶段由 `electron/files.ts` 读取文件元数据，并只在主进程内存中记录本次会话的来源路径。`preview:load` 在当前标签挂载时读取字节；`PreviewTab` 卸载时保存倍率、适配与滚动状态并释放渲染对象。打印提交前同样按所选文件 ID 读取内容，来源文件已移动或不可读时按文件显示错误；不生成磁盘缓存或文件历史。`usePrintQueue` 默认折叠新增条目，打印面板按滚动位置逐批呈现条目，展开后才解析纸张示意。路径映射在应用进程结束时销毁。
+
 ## 3.3 打印工作区
 
 `electron/printing/window.ts` 管理唯一独立打印设置窗口、待交付文件与原预览联动。列表和逐文件参数由 `usePrintQueue.ts` 持有，`PrintOptions.vue` 展示行内参数，`PageDimensions.vue` 仅在内存读取尺寸。`PrintPanel` 不再通过 Teleport 创建遮罩；真实窗口由系统提供拖动/缩放。

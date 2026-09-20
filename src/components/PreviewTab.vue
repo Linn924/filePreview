@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, computed } from "vue";
+import { ref, shallowRef, nextTick, watch, computed, onMounted, onBeforeUnmount } from "vue";
 import { getPreviewModule } from "../modules";
 import FitControl from "./FitControl.vue";
 import type { FitMode } from "../composables/fit";
@@ -11,6 +11,24 @@ const props = defineProps<{
   initialZoom: number;
   immersive?: boolean;
 }>();
+const content=shallowRef<PreviewFile>();
+let disposed=false;
+onMounted(async()=>{
+ if(props.file.error){content.value=props.file;return;}
+ const loaded=await window.localPreview.loadPreview(props.file);
+ if(disposed)return;
+ loaded.view=props.file.view;
+ content.value=loaded;
+ if(loaded.error){error.value=loaded.error;ready.value=true;}
+});
+onBeforeUnmount(()=>{
+ disposed=true;
+ props.file.view ??={zoom:zoom.value,scroll:[]};
+ props.file.view.zoom=zoom.value;
+ props.file.view.fit=fitMode.value;
+ props.file.view.scroll=scrollers().map(el=>({top:el.scrollTop,left:el.scrollLeft}));
+ content.value=undefined;
+});
 const module = computed(
   () => getPreviewModule(props.file.ext) as PreviewModule | undefined,
 );
@@ -94,15 +112,14 @@ async function loaded() {
       <small class="filesize">{{ fileSize(file.size) }}</small>
     </div>
     <!-- Plan B: action strip -->
-    <div class="filebar actbar">
+    <div class="filebar actbar" role="toolbar" aria-label="文件预览工具">
       <FitControl
         v-if="!error && module?.pageFit"
         v-model="fitMode"
         @update:model-value="zoom = 100"
       />
-      <span class="sep" aria-hidden="true"></span>
+      <span v-if="!error && module?.pageFit" class="sep" aria-hidden="true"></span>
       <ZoomControl v-if="!error" v-model="zoom" />
-      <span class="sep" aria-hidden="true"></span>
       <span class="module-tools" :data-tools-for="file.id"></span>
       <component
         v-if="module?.toolbar && !error"
@@ -123,6 +140,7 @@ async function loaded() {
         <span class="sr-only">{{ immersive ? "退出全屏" : "沉浸" }}</span>
       </button>
     </div>
+    <div class="search-tools"></div>
     <div v-if="error" class="error" role="alert">
       <strong>暂时无法预览</strong>
       <p>{{ error }}</p>
@@ -130,8 +148,9 @@ async function loaded() {
     <template v-else
       ><div v-if="!ready" class="loading" role="status">正在解析文件…</div>
       <component
+        v-if="content && !content.error"
         :is="getPreviewModule(file.ext)?.component"
-        :file="file"
+        :file="content"
         :zoom="zoom"
         :fit-mode="fitMode"
         @update:zoom="zoom = $event"

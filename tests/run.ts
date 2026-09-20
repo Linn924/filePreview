@@ -18,6 +18,7 @@ const names = [
   "printing",
   "bulk",
   "bench",
+  "visual",
 ];
 if (selected.some((s) => s !== "all" && !names.includes(s)))
   throw new Error("未知套件。支持：" + names.join(",") + " 或 all");
