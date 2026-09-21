@@ -20,12 +20,22 @@ import {
   validatePrintOptions,
   applyPageOrder,
   printScaleFactor,
+  paperSupportHint,
 } from "../shared/printing";
 import { fitScale } from "../src/composables/fit";
 assert.deepEqual(paperSize({ ...printDefaults, paper: "A5" }), {
   width: 148,
   height: 210,
 });
+assert.equal(paperSupportHint("A4"), null);
+assert.ok(paperSupportHint("A5")?.text.includes("A5"));
+assert.equal(
+  paperSupportHint("A5", { name: "Microsoft Print to PDF" })?.level,
+  "warn",
+);
+assert.ok(
+  paperSupportHint("A3", { name: "Office Laser" })?.text.includes("A3"),
+);
 assert.deepEqual(
   paperSize({ ...printDefaults, paper: "A5", landscape: true }),
   { width: 210, height: 148 },

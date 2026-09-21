@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import type { PdfPrintOptions } from "../../../../shared/printing";
-defineProps<{ modelValue: PdfPrintOptions; busy: boolean }>();
+import type { PdfPrintOptions, PaperSupportHint } from "../../../../shared/printing";
+defineProps<{
+  modelValue: PdfPrintOptions;
+  busy: boolean;
+  paperHint?: PaperSupportHint | null;
+}>();
 </script>
 <template>
   <div class="print-options">
@@ -61,6 +65,14 @@ defineProps<{ modelValue: PdfPrintOptions; busy: boolean }>();
       /><small
         >仅用于此文件；留空表示全部页。页序在范围筛选之后应用。</small
       ></label
+    ><p
+      v-if="paperHint"
+      class="paper-hint"
+      :class="paperHint.level"
+      role="status"
+      :aria-label="paperHint.text"
     >
+      {{ paperHint.text }}
+    </p>
   </div>
 </template>

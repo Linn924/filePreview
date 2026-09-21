@@ -345,6 +345,14 @@
 .chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .print-empty-warn{color:#b45309!important;font-size:12px!important;margin:0}
 .queue-note{font-size:12px!important;color:var(--accent)!important;margin:0}
+.paper-hint{font-size:12px!important;margin:0;padding:6px 8px;border-radius:6px;line-height:1.4}
+.paper-hint.info{color:var(--muted);background:var(--well)}
+.paper-hint.warn{color:#8a5a00;background:color-mix(in srgb,#f59e0b 14%,var(--panel));border:1px solid color-mix(in srgb,#f59e0b 35%,var(--line))}
+html[data-theme="dark"] .paper-hint.warn{color:#fbbf24}
+.paper-chip{margin-left:6px;font-size:10px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.paper-chip.warn{border-color:color-mix(in srgb,#f59e0b 50%,var(--line));color:#8a5a00}
+html[data-theme="dark"] .paper-chip.warn{color:#fbbf24}
+.print-options .paper-hint{grid-column:1/-1}
 .print-dropzone{border:1px dashed var(--line);border-radius:8px;padding:28px 12px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:10px;align-items:center}
 .print-files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:none;overflow:visible;flex:1}
 .print-workspace .print-file-card{display:block;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);margin:0}

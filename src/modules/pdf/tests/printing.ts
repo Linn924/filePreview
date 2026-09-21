@@ -135,6 +135,11 @@ const suite: Suite = async (c) => {
       win,
       "(()=>{const s=document.querySelector('[aria-label=打印纸张]');s.value='A5';s.dispatchEvent(new Event('change',{bubbles:true}))})()",
     );
+    await c.check(
+      win,
+      "paper support hint shown when A5 selected",
+      "!!document.querySelector('.paper-hint') && document.querySelector('.paper-hint')?.textContent?.includes('A5')",
+    );
     await c.click(win, ".pdf-print-panel .primary");
     await c.check(
       win,
@@ -234,11 +239,17 @@ const suite: Suite = async (c) => {
       "(()=>{const r=document.querySelector('.print-range input');r.value='2';r.dispatchEvent(new Event('input',{bubbles:true}))})()",
     );
     await c.click(win, ".apply-print-all");
+    await c.pause(80);
     hold = true;
-    await c.click(win, ".pdf-print-panel .primary");
+    await c.click(win, ".pdf-print-panel footer .print-go");
+    await c.pause(120);
     for (let i = 0; i < 100 && !release; i++) await c.pause(50);
     if (!release) throw Error("Print job not ready for stop test");
-    await c.click(win, ".pdf-print-panel footer button", "停止后续任务");
+    await c.click(
+      win,
+      ".pdf-print-panel footer button",
+      "停止后续任务",
+    );
     hold = false;
     release();
     await c.check(

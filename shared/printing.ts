@@ -9,6 +9,42 @@ export interface Printer {
 }
 export type PrintScale = "fit" | "actual" | "shrink";
 export type PrintPageOrder = "forward" | "reverse" | "odd" | "even";
+export type PaperHintLevel = "info" | "warn" | null;
+export interface PaperSupportHint {
+  level: NonNullable<PaperHintLevel>;
+  text: string;
+}
+/**
+ * Best-effort paper support warning before submit. Never blocks printing.
+ * Does not call the printer; uses paper choice + driver name heuristics.
+ */
+export function paperSupportHint(
+  paper: PdfPrintOptions["paper"],
+  printer?: {
+    name?: string;
+    displayName?: string;
+    description?: string;
+    status?: string;
+  },
+): PaperSupportHint | null {
+  if (!paper || paper === "A4") return null;
+  const blob =
+    `${printer?.name || ""} ${printer?.displayName || ""} ${printer?.description || ""} ${printer?.status || ""}`.toLowerCase();
+  if (/pdf|virtual|foxit|wps|one.?note|xps|print to/.test(blob))
+    return {
+      level: "warn",
+      text: `当前打印机多为虚拟打印设备，可能不支持 ${paper}。建议改用 A4，或在系统打印机首选项中启用 ${paper} 后再打印。`,
+    };
+  if (paper === "A3" || paper === "A6")
+    return {
+      level: "warn",
+      text: `${paper} 非常用办公纸张，打印机可能不支持。失败时请改用 A4，或在驱动中启用 ${paper}。`,
+    };
+  return {
+    level: "info",
+    text: `已选择 ${paper}。若提交失败，说明打印机可能不支持 ${paper}，请改用 A4 或在驱动中启用该尺寸。`,
+  };
+}
 export interface PdfPrintOptions {
   deviceName: string;
   copies: number;

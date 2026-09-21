@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch, toRaw, computed } from "vue";
 import type { PreviewFile } from "../../../../shared/contracts";
 import type { Printer } from "../../../../shared/printing";
+import { paperSupportHint } from "../../../../shared/printing";
 import PageDimensions from "./PageDimensions.vue";
 import PaperPreview from "./PaperPreview.vue";
 import PrintOptions from "./PrintOptions.vue";
@@ -88,6 +89,22 @@ const capabilities = computed(() => {
       !blob);
   return { duplex, color };
 });
+function hintFor(paper: NonNullable<Parameters<typeof paperSupportHint>[0]>) {
+  return paperSupportHint(paper, {
+    name: deviceName.value,
+    displayName: printers.value.find((p) => p.name === deviceName.value)
+      ?.displayName,
+    description: printers.value.find((p) => p.name === deviceName.value)
+      ?.description,
+    status: printers.value.find((p) => p.name === deviceName.value)?.status,
+  });
+}
+/** Files that warn about non-A4 / virtual printer paper support. */
+const paperWarnings = computed(() =>
+  files.value
+    .map((row) => ({ id: row.file.id, paper: row.options.paper, hint: hintFor(row.options.paper) }))
+    .filter((x) => x.hint),
+);
 
 onMounted(async () => {
   document.title = "打印设置";
@@ -188,6 +205,10 @@ const orderLabel = (o?: string) =>
       </p>
       <p v-if="queueNote" class="queue-note" role="status">{{ queueNote }}</p>
 
+      <p v-if="paperWarnings.length" class="paper-hint warn" role="status">
+        {{ paperWarnings[0]!.hint!.text }}
+      </p>
+
       <div v-if="!files.length" class="print-dropzone">
         <p>拖入文件，或</p>
         <button type="button" class="primary" @click="choose">添加文件</button>
@@ -250,7 +271,7 @@ const orderLabel = (o?: string) =>
             </button>
           </div>
           <div class="print-file-summary">
-            <span class="summary-line">
+              <span class="summary-line">
               {{ row.options.paper }}
               {{ row.options.landscape ? "横向" : "纵向" }} ·
               {{ row.options.copies }} 份 ·
@@ -259,6 +280,12 @@ const orderLabel = (o?: string) =>
               <template v-if="row.options.pageOrder && row.options.pageOrder !== 'forward'">
                 · {{ orderLabel(row.options.pageOrder) }}
               </template>
+              <span
+                v-if="hintFor(row.options.paper)"
+                class="paper-chip"
+                :class="hintFor(row.options.paper)!.level"
+                :title="hintFor(row.options.paper)!.text"
+              >纸张提示</span>
             </span>
             <button
               type="button"
@@ -299,6 +326,7 @@ const orderLabel = (o?: string) =>
                 v-if="row.expanded"
                 :model-value="row.options"
                 :busy="busy"
+                :paper-hint="hintFor(row.options.paper)"
               />
             </div>
           </div>
