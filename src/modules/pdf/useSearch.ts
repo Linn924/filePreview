@@ -2,7 +2,12 @@ import { ref, shallowRef, type Ref } from "vue";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
 export interface SearchHit {
+  /** 1-based page */
   page: number;
+  /** char offset in page text */
+  charOffset: number;
+  length: number;
+  /** snippet around hit */
   text: string;
 }
 
@@ -13,6 +18,7 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
   const active = ref(-1);
   const error = ref("");
   const cache = new Map<number, string>();
+  let searchRevision = 0;
 
   async function pageText(n: number) {
     let text = cache.get(n);
@@ -24,10 +30,7 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     const parts = content.items
       .map((item) => ("str" in item ? item.str : ""))
       .filter(Boolean);
-    // Keep both spaced and compact forms so CJK and Latin invoices match.
-    text = [parts.join(" "), parts.join("")]
-    .map((s) => s.replace(/\s+/g, " ").trim())
-    .join("\n");
+    text = parts.join(" ").replace(/\s+/g, " ").trim();
     cache.set(n, text);
     return text;
   }
@@ -37,6 +40,7 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     error.value = "";
     hits.value = [];
     active.value = -1;
+    const rev = ++searchRevision;
     const q = value.trim();
     if (!q || !pdf.value) return;
     searching.value = true;
@@ -44,15 +48,29 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
       const found: SearchHit[] = [];
       const needle = q.toLowerCase();
       for (let n = 1; n <= pdf.value.numPages; n++) {
+        if (rev !== searchRevision) return;
         const text = await pageText(n);
-        if (text.toLowerCase().includes(needle)) found.push({ page: n, text });
+        if (rev !== searchRevision) return;
+        const hay = text.toLowerCase();
+        let at = hay.indexOf(needle);
+        while (at >= 0) {
+          if (rev !== searchRevision) return;
+          found.push({
+            page: n,
+            charOffset: at,
+            length: needle.length,
+            text: text.slice(Math.max(0, at - 12), at + needle.length + 18),
+          });
+          hits.value = [...found];
+          if (active.value === -1) active.value = 0;
+          at = hay.indexOf(needle, at + Math.max(1, needle.length));
+        }
       }
-      hits.value = found;
-      active.value = found.length ? 0 : -1;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      if (rev === searchRevision)
+        error.value = e instanceof Error ? e.message : String(e);
     } finally {
-      searching.value = false;
+      if (rev === searchRevision) searching.value = false;
     }
   }
 
@@ -71,5 +89,16 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     active.value = -1;
     error.value = "";
   }
-  return { query, searching, hits, active, error, run, next, prev, clear, pageText };
+  return {
+    query,
+    searching,
+    hits,
+    active,
+    error,
+    run,
+    next,
+    prev,
+    clear,
+    pageText,
+  };
 }

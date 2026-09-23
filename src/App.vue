@@ -192,29 +192,6 @@ function onTabsWheel(event: WheelEvent) {
   event.preventDefault();
   switchBy(delta > 0 ? 1 : -1);
 }
-/** At document top/bottom, continue wheel to prev/next file. */
-function scrollHostAtEdge(el: EventTarget | null, deltaY: number) {
-  if (!el || !(el instanceof Element)) return false;
-  let node: Element | null = el;
-  while (node && node !== document.body) {
-    const html = node as HTMLElement;
-    if (html.scrollHeight > html.clientHeight + 4) {
-      const atTop = html.scrollTop <= 2;
-      const atBottom =
-        html.scrollTop + html.clientHeight >= html.scrollHeight - 2;
-      if (deltaY > 0 && atBottom) return true;
-      if (deltaY < 0 && atTop) return true;
-      return false;
-    }
-    node = node.parentElement;
-  }
-  return false;
-}
-function onPreviewWheel(event: WheelEvent) {
-  if (!isPreview || files.value.length < 2) return;
-  if (!scrollHostAtEdge(event.target, event.deltaY)) return;
-  if (switchBy(event.deltaY > 0 ? 1 : -1)) event.preventDefault();
-}
 async function save(value: Partial<Settings>) {
   try {
     settings.value = await window.localPreview.setSettings(value);
@@ -242,6 +219,14 @@ function key(event: KeyboardEvent) {
   } else if (event.ctrlKey && event.key === "Tab") {
     event.preventDefault();
     switchTabBy(event.shiftKey ? -1 : 1);
+  } else if (event.ctrlKey && event.key.toLowerCase() === "f") {
+    const file = files.value.find((f) => f.id === active.value);
+    if (file?.ext === "pdf") {
+      event.preventDefault();
+      window.dispatchEvent(
+        new CustomEvent("pdf:open-search", { detail: file.id }),
+      );
+    }
   } else if (event.key === "Escape") {
     showSettings.value = false;
   }
@@ -249,8 +234,6 @@ function key(event: KeyboardEvent) {
 onMounted(async () => {
   window.addEventListener("keydown", key);
   media.addEventListener("change", applyTheme);
-  // Non-passive so we can stop native scroll when switching files at edges.
-  mainEl.value?.addEventListener("wheel", onPreviewWheel, { passive: false });
   settings.value = await window.localPreview.getSettings();
   applyTheme();
   unsubscribe = window.localPreview.onSettings((value) => {
@@ -294,7 +277,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", key);
   media.removeEventListener("change", applyTheme);
-  mainEl.value?.removeEventListener("wheel", onPreviewWheel);
   unsubscribe?.();
   cleanups.forEach((fn) => fn());
 });

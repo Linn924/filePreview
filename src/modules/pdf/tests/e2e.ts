@@ -219,6 +219,116 @@ const suite: Suite = async (c) => {
     "document.querySelector('.page-nav input').value==='2'",
   );
   await c.snapshot(searchWin, "pdf-search-nav");
+
+  // --- Multi-hit + always-on text layer + annot + permissions + thumb follow ---
+  if (!(await c.evaluate(searchWin, "!!document.querySelector('.pdf-search-input')"))) await c.click(searchWin, ".pdf-search-toggle");
+  await c.evaluate(
+    searchWin,
+    "(()=>{const i=document.querySelector('.pdf-search-input');i.value='Local';i.dispatchEvent(new Event('input',{bubbles:true}))})()",
+  );
+  await c.click(searchWin, ".pdf-search-go");
+  await c.check(
+    searchWin,
+    "multi-hit search counts words not just pages",
+    "(()=>{const t=document.querySelector('.pdf-search-count')?.textContent||'';const m=t.match(/(\\d+) \\/ (\\d+)/);return !!m && Number(m[2])>=2})()",
+  );
+  await c.check(
+    searchWin,
+    "text layer built without requiring search open",
+    "!!document.querySelector('.pdf-text-layer[data-built=\"1\"]')",
+  );
+  await c.check(
+    searchWin,
+    "text spans selectable always",
+    "(()=>{const s=document.querySelector('.pdf-text-layer span');if(!s)return false;const cs=getComputedStyle(s);return cs.pointerEvents==='auto'})()",
+  );
+  await c.check(
+    searchWin,
+    "annot layer exists",
+    "!!document.querySelector('.pdf-annot-layer')",
+  );
+  await c.check(
+    searchWin,
+    "print allowed when unrestricted",
+    "(()=>{const b=document.querySelector('.pdf-print-button');return !!b && !b.disabled})()",
+  );
+  if (!(await c.evaluate(searchWin, "!!document.querySelector('.pdf-nav')"))) await c.click(searchWin, ".pdf-nav-toggle");
+  await c.click(searchWin, ".pdf-nav-tab", "缩略图");
+  await c.evaluate(
+    searchWin,
+    "(()=>{const p=document.querySelector('.page-nav input');p.value='2';p.dispatchEvent(new Event('change',{bubbles:true}))})()",
+  );
+  await c.pause(400);
+  await c.check(
+    searchWin,
+    "thumbnail follows current page",
+    "(()=>{const host=document.querySelector('.pdf-thumbs');const t=host?.querySelector('.thumb.current');if(!host||!t)return false;const h=host.getBoundingClientRect(),r=t.getBoundingClientRect();return r.bottom>h.top-4&&r.top<h.bottom+4})()",
+  );
   c.close(searchWin);
+
+  // --- Text selection (item 1): text layer built without search open ---
+  const selWin = await c.open("document.pdf");
+  await c.pause(800); // wait for text layer async build
+  await c.check(
+    selWin,
+    "text layer built for visible page without search open",
+    "!!document.querySelector('.pdf-text-layer[data-built=\"1\"]')",
+  );
+  await c.check(
+    selWin,
+    "text layer spans are selectable (pointer-events auto)",
+    `(()=>{
+      const span = document.querySelector('.pdf-text-layer[data-built="1"] span');
+      if (!span) return false;
+      const style = window.getComputedStyle(span);
+      return style.pointerEvents === 'auto' && style.userSelect === 'text';
+    })()`,
+  );
+  c.close(selWin);
+
+  // --- Keyboard navigation (item 9): PageDown / PageUp ---
+  const kbWin = await c.open("document.pdf");
+  kbWin.setSize(1000, 700);
+  await c.pause(300);
+  // Focus the scroll area then send PageDown
+  await c.evaluate(kbWin,
+    "document.querySelector('.pdf-scroll').focus();" +
+    "document.querySelector('.pdf-scroll').dispatchEvent(new KeyboardEvent('keydown',{key:'PageDown',bubbles:true,cancelable:true}))"
+  );
+  await c.pause(300);
+  await c.check(
+    kbWin,
+    "PageDown advances to page 2",
+    "document.querySelector('.page-nav input').value==='2'",
+  );
+  await c.evaluate(kbWin,
+    "document.querySelector('.pdf-scroll').dispatchEvent(new KeyboardEvent('keydown',{key:'PageUp',bubbles:true,cancelable:true}))"
+  );
+  await c.pause(300);
+  await c.check(
+    kbWin,
+    "PageUp returns to page 1",
+    "document.querySelector('.page-nav input').value==='1'",
+  );
+  c.close(kbWin);
+
+  // --- Ctrl+F (item 3): opens PDF search bar ---
+  const ctrlFWin = await c.open("document.pdf");
+  await c.pause(200);
+  await c.check(
+    ctrlFWin,
+    "search bar closed before Ctrl+F",
+    "!document.querySelector('.pdf-search-input')",
+  );
+  await c.evaluate(ctrlFWin,
+    "window.dispatchEvent(new KeyboardEvent('keydown',{key:'f',ctrlKey:true,bubbles:true,cancelable:true}))"
+  );
+  await c.pause(200);
+  await c.check(
+    ctrlFWin,
+    "Ctrl+F opens PDF search bar",
+    "!!document.querySelector('.pdf-search-input')",
+  );
+  c.close(ctrlFWin);
 };
 export default suite;

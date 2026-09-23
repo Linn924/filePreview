@@ -1,8 +1,12 @@
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer, shell, webUtils } from "electron";
 import type { DesktopBridge, Settings } from "../shared/contracts";
 
 const bridge: DesktopBridge = {
   loadPreview: (file) => ipcRenderer.invoke("preview:load", file),
+  openExternal: async (url: string) => {
+    if (!/^https?:\/\//i.test(url)) throw Error("仅允许打开 http(s) 链接。");
+    await shell.openExternal(url);
+  },
   openPrintPanel: (files) => ipcRenderer.invoke("print:open-panel", files),
   printPanelFiles: () => ipcRenderer.invoke("print:panel-files"),
   onPrintIncoming: (handler) => {

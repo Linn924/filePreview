@@ -34,6 +34,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     load: PDFDocumentLoadingTask | undefined;
   const pdfRef = shallowRef<PDFDocumentProxy | undefined>();
   const needPassword = ref(false);
+  const allowPrint = ref(true);
   const passwordError = ref("");
   const rotate = ref<0 | 90 | 180 | 270>(props.file.view?.rotate || 0);
   let disposed = false,
@@ -267,6 +268,14 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       });
       pdf = await load.promise;
       pdfRef.value = pdf;
+      try {
+        const perms = (await pdf.getPermissions()) as number | null;
+        // null/undefined = unlimited; otherwise bit flags (PDF.js PermissionFlag)
+        if (perms == null) allowPrint.value = true;
+        else allowPrint.value = ((Number(perms) & 4) === 4); // PRINT = 0x04
+      } catch {
+        allowPrint.value = true;
+      }
       if (disposed) return;
       const first = await pdf.getPage(1);
       if (disposed) return;
@@ -363,5 +372,6 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     unlock,
     rotate,
     setRotate,
+    allowPrint,
   };
 }

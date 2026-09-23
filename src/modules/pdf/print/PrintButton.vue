@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { inject, ref, type ShallowRef } from "vue";
+import { computed, inject, ref, type Ref, type ShallowRef } from "vue";
 import type { PreviewFile } from "../../../../shared/contracts";
 import { printError } from "./errorMessage";
-const props = defineProps<{ file: PreviewFile }>();
+const props = defineProps<{ file: PreviewFile; disabled?: boolean }>();
 const error = ref("");
 const previewFiles = inject<ShallowRef<PreviewFile[]>>("previewFiles");
+const allowPrintRef = inject<Ref<boolean>>("pdfAllowPrint");
+const canPrint = computed(() => allowPrintRef?.value !== false);
 async function open() {
   try {
     const { printEntry } = await window.localPreview.getSettings();
@@ -34,7 +36,8 @@ async function open() {
     ><button
       class="pdf-print-button icon-only-btn"
       type="button"
-      title="打印"
+      :disabled="disabled || !canPrint"
+      :title="disabled || !canPrint ? '此文档不允许打印' : '打印'"
       aria-label="打印"
       @click="open"
     >

@@ -110,7 +110,7 @@
 .pdf-page.is-active-hit {
   box-shadow: 0 0 0 3px #409eff88;
 }
-/* Text layer must stay inside the page box and never cover chrome UI. */
+/* Text layer: always selectable for copy; independent of search bar. */
 .pdf-text-layer {
   position: absolute;
   left: 0;
@@ -121,16 +121,9 @@
   height: 100%;
   overflow: hidden;
   line-height: 1;
-  opacity: 0;
+  opacity: 0.01;
   pointer-events: none;
   z-index: 2;
-}
-.pdf-text-layer.enabled {
-  /* Keep selection possible without swallowing toolbar clicks outside the page. */
-  opacity: 0.01;
-  pointer-events: auto;
-  user-select: text;
-  cursor: text;
 }
 .pdf-text-layer span {
   position: absolute;
@@ -138,6 +131,34 @@
   transform-origin: 0 0;
   color: transparent;
   cursor: text;
+  pointer-events: auto;
+  user-select: text;
+}
+.pdf-text-layer .pdf-hit {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 2px;
+}
+.pdf-text-layer .pdf-hit.is-active {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 1px solid var(--accent);
+}
+.pdf-annot-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+.pdf-annot-layer a {
+  position: absolute;
+  pointer-events: auto;
+  background: transparent;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pdf-annot-layer a:hover {
+  outline: 1.5px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .pdf-nav {
   position: relative;
@@ -398,4 +419,31 @@ html[data-theme="dark"] .paper-chip.warn{color:#fbbf24}
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
+}
+
+.outline-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+}
+.outline-toggle,
+.outline-toggle-spacer {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.outline-toggle-spacer {
+  display: inline-block;
+}
+.outline-item {
+  flex: 1;
+  min-width: 0;
+}
+.pdf-perm-note {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 10px;
+  margin: 0;
 }

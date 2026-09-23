@@ -101,6 +101,7 @@ export function normalizeSettings(
 }
 export interface DesktopBridge {
   loadPreview(file:PreviewFile):Promise<PreviewFile>;
+  openExternal(url: string): Promise<void>;
   openPrintPanel(files:PreviewFile[]):Promise<void>;
   printPanelFiles():Promise<PreviewFile[]>;
   onPrintIncoming(handler:()=>void):()=>void;

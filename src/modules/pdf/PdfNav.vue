@@ -15,18 +15,22 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ jump: [page: number] }>();
 const tab = ref<"outline" | "thumbs">("outline");
-interface OutlineItem {
+
+interface OutlineNode {
   title: string;
   page: number;
   depth: number;
+  key: string;
+  parentKey: string | null;
+  hasChildren: boolean;
 }
-const outline = ref<OutlineItem[]>([]);
+const outline = ref<OutlineNode[]>([]);
+const collapsed = ref(new Set<string>());
 const thumbHost = ref<HTMLElement>();
 const THUMB_CSS_W = 112;
-const THUMB_GAP = 10; // matches .thumb margin-bottom
+const THUMB_GAP = 10;
 const EST_H = 148;
 const pageCount = ref(0);
-/** page index 0-based → css height (filled lazily) */
 const heights = ref<number[]>([]);
 const scrollTop = ref(0);
 const clientH = ref(400);
@@ -37,6 +41,7 @@ let disposed = false;
 
 async function loadOutline() {
   outline.value = [];
+  collapsed.value = new Set();
   if (!props.pdf) return;
   try {
     const items = await props.pdf.getOutline();
@@ -48,8 +53,15 @@ async function loadOutline() {
       dests instanceof Map
         ? dests.get(name)
         : (dests as Record<string, unknown>)[name];
-    const walk = async (list: typeof items, depth: number): Promise<void> => {
-      for (const item of list) {
+    const walk = async (
+      list: typeof items,
+      depth: number,
+      parentKey: string | null,
+      path: string,
+    ): Promise<void> => {
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        const key = `${path}.${i}`;
         let page = 0;
         try {
           const dest =
@@ -64,15 +76,53 @@ async function loadOutline() {
         } catch {
           page = 0;
         }
-        outline.value.push({ title: item.title || "未命名", page, depth });
-        if (item.items?.length) await walk(item.items, depth + 1);
+        const hasChildren = !!(item.items && item.items.length);
+        outline.value.push({
+          title: item.title || "未命名",
+          page,
+          depth,
+          key,
+          parentKey,
+          hasChildren,
+        });
+        // Default: expand only first two levels.
+        if (hasChildren && depth >= 2) collapsed.value.add(key);
+        if (item.items?.length) await walk(item.items, depth + 1, key, key);
       }
     };
-    await walk(items, 0);
+    await walk(items, 0, null, "r");
   } catch {
     outline.value = [];
   }
 }
+
+function toggleOutline(key: string) {
+  const next = new Set(collapsed.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  collapsed.value = next;
+}
+
+function outlineHidden(item: OutlineNode) {
+  let p = item.parentKey;
+  while (p) {
+    if (collapsed.value.has(p)) return true;
+    p = outline.value.find((n) => n.key === p)?.parentKey ?? null;
+  }
+  return false;
+}
+
+const visibleOutline = computed(() =>
+  outline.value.filter((item) => !outlineHidden(item)),
+);
+
+const currentOutlineKey = computed(() => {
+  let hit: string | null = null;
+  for (const item of outline.value) {
+    if (item.page && item.page <= props.current) hit = item.key;
+  }
+  return hit;
+});
 
 function initThumbsMeta() {
   paintedPages.clear();
@@ -231,10 +281,27 @@ function schedulePaint() {
     }
     void paintOne(node, page, epoch);
   }
-  // Resolve placeholder heights near the window so scroll length stays stable.
-  for (let i = virtualStart.value; i < virtualEnd.value; i++)
-    void ensureSize(i);
+  for (let i = virtualStart.value; i < virtualEnd.value; i++) void ensureSize(i);
 }
+
+/** Keep current page thumbnail in view when reading the document (item 8). */
+watch(
+  () => props.current,
+  () => {
+    if (tab.value !== "thumbs" || !thumbHost.value) return;
+    const idx = props.current - 1;
+    if (idx < 0) return;
+    const top = offsets.value[idx] || 0;
+    const h = heights.value[idx] || EST_H;
+    const host = thumbHost.value;
+    const viewTop = host.scrollTop;
+    const viewBottom = viewTop + host.clientHeight;
+    if (top < viewTop + 8 || top + h > viewBottom - 8) {
+      host.scrollTop = Math.max(0, top - host.clientHeight / 3);
+      schedulePaint();
+    }
+  },
+);
 
 async function showThumbsAndPaint() {
   await nextTick();
@@ -250,6 +317,15 @@ async function showThumbsAndPaint() {
     if (canvas && canvasLooksBlank(canvas)) paintedPages.delete(i);
   }
   schedulePaint();
+  // Also scroll current thumb into view when opening thumbs (item 8).
+  if (thumbHost.value) {
+    const top = offsets.value[props.current - 1] || 0;
+    thumbHost.value.scrollTop = Math.max(
+      0,
+      top - thumbHost.value.clientHeight / 3,
+    );
+    schedulePaint();
+  }
 }
 
 watch(tab, async (value) => {
@@ -320,19 +396,38 @@ const hasOutline = computed(() => outline.value.length > 0);
       aria-label="目录"
     >
       <p v-if="!hasOutline" class="pdf-nav-empty">本文档没有目录/书签</p>
-      <button
-        v-for="(item, i) in outline"
-        :key="i"
-        type="button"
-        class="outline-item"
-        :style="{ paddingLeft: 8 + item.depth * 12 + 'px' }"
-        :disabled="!item.page"
-        :class="{ current: item.page === current }"
-        @click="item.page && emit('jump', item.page)"
-      >
-        {{ item.title }}
-        <small v-if="item.page">p.{{ item.page }}</small>
-      </button>
+      <template v-else>
+        <div
+          v-for="item in visibleOutline"
+          :key="item.key"
+          class="outline-row"
+          :style="{ paddingLeft: 6 + item.depth * 12 + 'px' }"
+        >
+          <button
+            v-if="item.hasChildren"
+            type="button"
+            class="outline-toggle icon-only-btn"
+            :title="collapsed.has(item.key) ? '展开' : '折叠'"
+            :aria-label="collapsed.has(item.key) ? '展开' : '折叠'"
+            @click="toggleOutline(item.key)"
+          >
+            <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path :d="collapsed.has(item.key) ? 'M5 3l5 5-5 5' : 'M3 5l5 5 5-5'" />
+            </svg>
+          </button>
+          <span v-else class="outline-toggle-spacer" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="outline-item"
+            :disabled="!item.page"
+            :class="{ current: item.key === currentOutlineKey }"
+            @click="item.page && emit('jump', item.page)"
+          >
+            {{ item.title }}
+            <small v-if="item.page">p.{{ item.page }}</small>
+          </button>
+        </div>
+      </template>
     </div>
     <div
       v-show="tab === 'thumbs'"
