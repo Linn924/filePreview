@@ -11,6 +11,7 @@ export async function checkContinuous(
   );
   win.show();
   win.focus();
+  await c.pause(150);
   win.webContents.debugger.attach("1.3");
   try {
     await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {

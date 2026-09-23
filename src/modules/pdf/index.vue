@@ -27,6 +27,7 @@ const {
   passwordError,
   unlock,
   rotate,
+  layout,
   setRotate,
   allowPrint,
 } = usePreview(props, emit);
@@ -35,6 +36,7 @@ provide("pdfAllowPrint", allowPrint);
 const searchOpen = ref(false);
 const navOpen = ref(false);
 const passwordInput = ref("");
+let textGeometryRevision = 0;
 function cycleRotate() {
   const next = (((rotate.value + 90) % 360) as 0 | 90 | 180 | 270);
   setRotate(next);
@@ -146,7 +148,11 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
   const doc = pdf.value;
   if (!doc) return;
   const layer = pageEl.querySelector(".pdf-text-layer") as HTMLElement | null;
-  if (!layer || layer.dataset.built === "1") return;
+  if (!layer) return;
+  const revision = String(textGeometryRevision);
+  if (layer.dataset.geometry === revision &&
+      (layer.dataset.built === "1" || layer.dataset.loading === revision)) return;
+  layer.dataset.loading = revision;
   let annotHost = pageEl.querySelector<HTMLElement>(".pdf-annot-layer");
   if (!annotHost) {
     annotHost = document.createElement("div");
@@ -157,10 +163,13 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
   annotHost.replaceChildren();
   try {
     const page = await doc.getPage(index + 1);
+    if (!layer.isConnected || layer.dataset.loading !== revision) return;
     const content = await page.getTextContent();
+    if (!layer.isConnected || layer.dataset.loading !== revision) return;
     const cssW = pageEl.clientWidth || parseFloat(pageEl.style.width) || 1;
-    const base = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: cssW / (base.width || 1) });
+    const rotation = (page.rotate + rotate.value) % 360;
+    const base = page.getViewport({ scale: 1, rotation });
+    const viewport = page.getViewport({ scale: cssW / (base.width || 1), rotation });
     layer.replaceChildren();
     const items = content.items as Array<{
       str?: string;
@@ -183,10 +192,13 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
       layer.append(span);
     }
     layer.dataset.built = "1";
+    layer.dataset.geometry = revision;
+    delete layer.dataset.loading;
 
     // Item 2: link annotations (GoTo / URI)
     try {
       const annotations = await page.getAnnotations();
+      if (!layer.isConnected || layer.dataset.geometry !== revision) return;
       for (const ann of annotations) {
         if (!ann || !ann.rect) continue;
         const kind = (ann as { subtype?: string }).subtype || "";
@@ -241,35 +253,26 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
       /* annotations optional */
     }
   } catch {
-    layer.dataset.built = "";
+    if(layer.dataset.loading === revision) {
+      layer.dataset.built = "";
+      delete layer.dataset.loading;
+    }
   }
 }
 
 // Always build text layers when visible pages change or PDF loads (item 1)
-watch([visiblePages, pdf], async () => {
+async function syncVisibleText(revision: number) {
   await nextTick();
-  for (const el of scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") || []) {
-    const i = Number(el.dataset.page);
-    if (Number.isFinite(i)) void buildTextLayer(el, i);
-  }
+  if (revision !== textGeometryRevision) return;
+  await Promise.all(Array.from(scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") || [])
+    .map(el => buildTextLayer(el, Number(el.dataset.page))));
+  if (revision === textGeometryRevision) highlightActiveHit();
+}
+watch([visiblePages, pdf], () => void syncVisibleText(textGeometryRevision));
+watch([() => props.zoom, () => props.fitMode, rotate, layout], () => {
+  const revision = ++textGeometryRevision;
+  void syncVisibleText(revision);
 });
-watch(
-  () => props.zoom,
-  () => {
-    for (const el of scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") || []) {
-      const layer = el.querySelector(".pdf-text-layer") as HTMLElement | null;
-      if (layer) layer.dataset.built = "";
-    }
-    void nextTick().then(() => {
-      for (const el of scroll.value?.querySelectorAll<HTMLElement>(
-        ".pdf-page",
-      ) || []) {
-        const i = Number(el.dataset.page);
-        if (Number.isFinite(i)) void buildTextLayer(el, i);
-      }
-    });
-  },
-);
 // Keyboard: PageDown / PageUp to jump pages (item 9 — keep)
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "PageDown") {

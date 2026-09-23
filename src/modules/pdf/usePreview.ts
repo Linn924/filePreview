@@ -21,6 +21,9 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { PreviewProps, PreviewEmit } from "../types";
 
 const OVERSCAN = 2;
+/** Must match .pdf-page margin-bottom; virtual padding represents complete page slots. */
+const PAGE_GAP = 24;
+const SCROLL_PADDING = 26;
 
 export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   GlobalWorkerOptions.workerSrc = workerUrl;
@@ -81,7 +84,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     void layout.value;
     const list = [0];
     for (let i = 0; i < pages.value.length; i++)
-      list.push(list[i] + pageCss(i).height);
+      list.push(list[i] + pageCss(i).height + PAGE_GAP);
     return list;
   });
   function indexAtOffset(y: number) {
@@ -119,13 +122,11 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       virtualEnd.value = Math.min(n, 1);
       return;
     }
-    const y = root.scrollTop;
+    const y = Math.max(0, root.scrollTop - SCROLL_PADDING);
     const h = root.clientHeight || 700;
     virtualStart.value = Math.max(0, indexAtOffset(y) - OVERSCAN);
     virtualEnd.value = Math.min(n, indexAtOffset(y + h) + 1 + OVERSCAN);
-    const top = root.getBoundingClientRect().top + Math.min(100, h * 0.2);
     current.value = indexAtOffset(y + Math.min(100, h * 0.2)) + 1;
-    void top;
   }
   function sync() {
     updateVirtualWindow();
@@ -135,7 +136,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     const index = Math.max(0, Math.min(n, Math.floor(value) || 1) - 1);
     const root = scroll.value;
     if (!root || !n) return;
-    root.scrollTop = Math.max(0, (offsets.value[index] || 0) - 8);
+    root.scrollTop = Math.max(0, offsets.value[index] || 0);
     current.value = index + 1;
     updateVirtualWindow();
   }
@@ -371,6 +372,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     passwordError,
     unlock,
     rotate,
+    layout,
     setRotate,
     allowPrint,
   };

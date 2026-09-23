@@ -1,6 +1,7 @@
 import type { Suite } from "../../../../tests/context";
 import { checkContinuous } from "../../../../tests/continuous";
 import { longFixture } from "./longFixture";
+import {linkFixture} from './linkFixture';
 const suite: Suite = async (c) => {
   const win = await c.open("document.pdf");
   await c.check(
@@ -36,6 +37,9 @@ const suite: Suite = async (c) => {
   await c.evaluate(long, "(()=>{const p=document.querySelector('.page-nav input');p.value='80';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
   await c.check(long, "long PDF last page renders after jump",
     "document.querySelector('.page-nav input').value==='80' && [...document.querySelectorAll('.pdf-page')].some(el=>el.dataset.page==='79'&&el.querySelector('canvas')?.width>0)");
+  await c.check(long,'last page aligns with scroll position',"(()=>{const root=document.querySelector('.pdf-scroll');const page=root.querySelector('.pdf-page[data-page=\"79\"]');return page&&Math.abs(page.getBoundingClientRect().top-root.getBoundingClientRect().top-26)<60})()");
+  await c.evaluate(long,"(()=>{const p=document.querySelector('.page-nav input');p.value='40';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(long,'middle page aligns after virtual jump',"(()=>{const root=document.querySelector('.pdf-scroll');const page=root.querySelector('.pdf-page[data-page=\"39\"]');return page&&Math.abs(page.getBoundingClientRect().top-root.getBoundingClientRect().top-26)<60})()");
   await c.evaluate(long, "(()=>{const z=document.querySelector('.zoom-control input');for(const v of ['125','80','137']){z.value=v;z.dispatchEvent(new Event('input',{bubbles:true}));z.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));}})()");
   await c.check(long, "rapid zoom retains rendered page without errors",
     "document.querySelector('.zoom-control input').value==='137' && [...document.querySelectorAll('canvas')].some(c=>c.width>0) && !document.querySelector('.error')");
@@ -75,6 +79,7 @@ const suite: Suite = async (c) => {
     "search marks hit page",
     "!!document.querySelector('.pdf-page.has-hit')",
   );
+  await c.check(searchWin,'search mark visible without duplicate text',"(()=>{const layer=document.querySelector('.pdf-text-layer:has(.pdf-hit)');const mark=layer?.querySelector('.pdf-hit');return !!mark&&getComputedStyle(layer).opacity==='1'&&getComputedStyle(mark).backgroundColor!=='rgba(0, 0, 0, 0)'&&getComputedStyle(mark).color==='rgba(0, 0, 0, 0)'})()");
   // Critical: after search open, toolbar / zoom / nav must still receive clicks.
   await c.check(
     searchWin,
@@ -285,6 +290,22 @@ const suite: Suite = async (c) => {
     })()`,
   );
   c.close(selWin);
+
+  // Rotation and fit must rebuild selectable text and link hit areas in the
+  // same page coordinates used by the visible bitmap.
+  linkFixture(c.fixture('linked-pages.pdf'));
+  const linked=await c.open('linked-pages.pdf');
+  await c.check(linked,'link overlay and text layer available',"!!document.querySelector('.pdf-annot-layer a')&&!!document.querySelector('.pdf-text-layer[data-built=\"1\"] span')");
+  const initial=await c.evaluate<{x:number;linkX:number;geometry:string}>(linked,"(()=>{const page=document.querySelector('.pdf-page');const span=page.querySelector('.pdf-text-layer span');const link=page.querySelector('.pdf-annot-layer a');return{x:span.getBoundingClientRect().left-page.getBoundingClientRect().left,linkX:link.getBoundingClientRect().left-page.getBoundingClientRect().left,geometry:page.querySelector('.pdf-text-layer').dataset.geometry}})()");
+  await c.click(linked,'.pdf-rotate');
+  await c.check(linked,'rotation rebuilds text and link positions',`(()=>{const page=document.querySelector('.pdf-page[data-page="0"]');const layer=page?.querySelector('.pdf-text-layer');const span=layer?.querySelector('span');const link=page?.querySelector('.pdf-annot-layer a');if(!span||!link||layer.dataset.built!=='1'||layer.dataset.geometry===${JSON.stringify(initial.geometry)})return false;const x=span.getBoundingClientRect().left-page.getBoundingClientRect().left;const lx=link.getBoundingClientRect().left-page.getBoundingClientRect().left;return Math.abs(x-${initial.x})>10&&Math.abs(lx-${initial.linkX})>10})()`);
+  const rotatedGeometry=await c.evaluate<string>(linked,"document.querySelector('.pdf-text-layer').dataset.geometry");
+  await c.evaluate(linked,"(()=>{const select=document.querySelector('[aria-label=页面适配]');select.value='width';select.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(linked,'fit mode rebuilds selectable text and link',`(()=>{const layer=document.querySelector('.pdf-page[data-page="0"] .pdf-text-layer');return layer?.dataset.built==='1'&&layer.dataset.geometry!==${JSON.stringify(rotatedGeometry)}&&!!document.querySelector('.pdf-page[data-page="0"] .pdf-annot-layer a')})()`);
+  await c.snapshot(linked,'pdf-rotated-link');
+  await c.click(linked,'.pdf-page[data-page="0"] .pdf-annot-layer a');
+  await c.check(linked,'rotated and fitted link opens its target page',"document.querySelector('.page-nav input').value==='2'");
+  c.close(linked);
 
   // --- Keyboard navigation (item 9): PageDown / PageUp ---
   const kbWin = await c.open("document.pdf");

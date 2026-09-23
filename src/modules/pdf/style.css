@@ -121,7 +121,8 @@
   height: 100%;
   overflow: hidden;
   line-height: 1;
-  opacity: 0.01;
+  /* The glyphs remain transparent; search marks and selection stay visible. */
+  opacity: 1;
   pointer-events: none;
   z-index: 2;
 }
@@ -134,8 +135,12 @@
   pointer-events: auto;
   user-select: text;
 }
+.pdf-text-layer span::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
 .pdf-text-layer .pdf-hit {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: transparent;
   border-radius: 2px;
 }
 .pdf-text-layer .pdf-hit.is-active {

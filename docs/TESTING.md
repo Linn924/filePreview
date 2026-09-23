@@ -16,6 +16,8 @@ fixtures 命令在 `work/fixtures/` 生成样例，并下载公开 DOC/PPT/PPTX 
 
 ## 集中执行与选择
 
+PDF 三项定位修复：仅修改 `src/modules/pdf/` 时运行 `npm test -- --suite pdf`。80 页横竖交替样例分别跳到第 40、80 页，检查真实页面顶边与滚动容器的距离；搜索命中检查背景可见、叠加文字透明；含内链的双页样例验证旋转与适配后文字、链接坐标更新，点击链接仍跳到第二页。测试还对照查看 `outputs/verification/pdf-search-nav.png` 与 `pdf-rotated-link.png`。其他格式未改动时无需全量回归。
+
 内存与长列表：unit 确认已选择文件仅携带元数据，打开可见标签时才读取字节；bulk 确认多文件仅挂载一个预览组件。printing 确认折叠行不创建纸张预览，同时保留批量设置与打印布局验证。共享预览容器变更按矩阵运行 all，测试不向实体打印机提交任务。
 
 视觉布局：`npm test -- --suite visual`。真实 Electron 窗口以 960×640 内容尺寸、125% 页面缩放检查 PDF、DOCX、Excel、PPTX、图片、Markdown、JSON 的白天/黑夜界面，PDF/文本展开搜索后检查工具栏控件未被裁切，内容区域仍可用，并保存截图与布局指标至 outputs/verification。页面缩放用于模拟密集布局，不等同于完整 Windows DPI/多显示器验收。`FILE_PREVIEW_VISUAL_AUDIT=1` 仅生成优化前截图，不执行新布局断言。修改公共样式后运行 all；禁止将 audit 模式结果当作布局回归通过。

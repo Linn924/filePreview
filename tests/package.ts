@@ -102,6 +102,8 @@ try {
   await evaluate(view,"document.querySelector('.pdf-print-button').click()");
   const panelTarget=await waitFor(async()=>(await targets()).find(t=>t.url.includes("print-panel=1")),"Packaged independent print window");
   const panel=await connect(panelTarget.webSocketDebuggerUrl);
+  await waitFor(()=>evaluate(panel,"!!document.querySelector('.print-file-card .toggle-print-options')"),"Packaged print row");
+  await evaluate(panel,"document.querySelector('.print-file-card .toggle-print-options').click()");
   await waitFor(()=>evaluate(panel,"[...document.querySelector('[aria-label=打印纸张]').options].some(option=>option.value==='A5')"),"Packaged PDF print options");
   await evaluate(panel,"setTimeout(()=>window.localPreview.close(),100);true");
   await pause(150);
