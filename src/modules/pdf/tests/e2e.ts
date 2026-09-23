@@ -40,9 +40,27 @@ const suite: Suite = async (c) => {
   await c.check(long,'last page aligns with scroll position',"(()=>{const root=document.querySelector('.pdf-scroll');const page=root.querySelector('.pdf-page[data-page=\"79\"]');return page&&Math.abs(page.getBoundingClientRect().top-root.getBoundingClientRect().top-26)<60})()");
   await c.evaluate(long,"(()=>{const p=document.querySelector('.page-nav input');p.value='40';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
   await c.check(long,'middle page aligns after virtual jump',"(()=>{const root=document.querySelector('.pdf-scroll');const page=root.querySelector('.pdf-page[data-page=\"39\"]');return page&&Math.abs(page.getBoundingClientRect().top-root.getBoundingClientRect().top-26)<60})()");
+  const painted = (page: number) => `(()=>{const canvas=document.querySelector('.pdf-page[data-page="${page}"] canvas');if(!canvas||canvas.width<100||canvas.height<100)return false;const data=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;for(let i=0;i<data.length;i+=400){if(data[i+3]>200&&data[i]<180&&data[i+2]>80)return true}return false})()`;
+  await c.check(long,'middle page is painted after leaving the end',painted(39));
+  await c.evaluate(long,"(()=>{const p=document.querySelector('.page-nav input');p.value='80';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(long,'last page repaints after returning',painted(79));
+  await c.evaluate(long,"(()=>{const p=document.querySelector('.page-nav input');p.value='40';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(long,'middle page repaints on second visit',painted(39));
   await c.evaluate(long, "(()=>{const z=document.querySelector('.zoom-control input');for(const v of ['125','80','137']){z.value=v;z.dispatchEvent(new Event('input',{bubbles:true}));z.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));}})()");
   await c.check(long, "rapid zoom retains rendered page without errors",
     "document.querySelector('.zoom-control input').value==='137' && [...document.querySelectorAll('canvas')].some(c=>c.width>0) && !document.querySelector('.error')");
+  await c.evaluate(long,"(()=>{const z=document.querySelector('.zoom-control input');z.value='400';z.dispatchEvent(new Event('input',{bubbles:true}));z.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()");
+  await c.check(long,'400% bitmap remains bounded and visible',"(()=>{const canvases=[...document.querySelectorAll('.pdf-page canvas')].filter(c=>c.width>0);return document.querySelector('.zoom-control input').value==='400'&&canvases.length>0&&canvases.every(c=>c.width*c.height<=6000000)})()");
+  await c.evaluate(long,"(()=>{const p=document.querySelector('.page-nav input');p.value='40';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(long,'thumbnail test begins on page 40',"document.querySelector('.page-nav input').value==='40'");
+  await c.click(long,'.pdf-nav-toggle');
+  await c.click(long,'.pdf-nav-tab','缩略图');
+  await c.check(long,'visible thumbnail painted before distant jump',"!!document.querySelector('.thumb.thumb-painted canvas[width]')");
+  const thumbPage=await c.evaluate<number>(long,"Number(document.querySelector('.thumb.thumb-painted').dataset.page)");
+  await c.evaluate(long,"(()=>{const p=document.querySelector('.page-nav input');p.value='80';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(long,'last thumbnail painted after jump',"document.querySelector('.thumb[data-page=\"80\"].thumb-painted canvas')?.width>0");
+  await c.evaluate(long,`(()=>{const p=document.querySelector('.page-nav input');p.value='${thumbPage}';p.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+  await c.check(long,'thumbnail repaints after virtual remount',`document.querySelector('.thumb[data-page="${thumbPage}"].thumb-painted canvas')?.width>0`);
   c.close(long);
 
   // --- Precise search / nav interaction (hit-test chrome after opening panels) ---
@@ -159,6 +177,14 @@ const suite: Suite = async (c) => {
     searchWin,
     "thumbnails stay painted after tab switches",
     `(()=>{const cs=[...document.querySelectorAll('.thumb canvas')];return cs.length===2&&cs.every(c=>c.width>0&&c.height>0&&c.closest('.thumb')?.classList.contains('thumb-painted'))})()`,
+  );
+  await c.check(
+    searchWin,
+    "single-flight thumb paint keeps pixels after outline toggle",
+    `(()=>{
+      const cs=[...document.querySelectorAll('.thumb canvas')];
+      return cs.length===2 && cs.every((c)=>c.width>0 && c.height>0);
+    })()`,
   );
   await c.check(
     searchWin,

@@ -1,6 +1,7 @@
 import { fitScale } from "../../composables/fit";
 import { previewError } from "../../../shared/previewError";
 import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
+import { previewPixelRatio } from "./bitmap";
 import {
   onMounted,
   onBeforeUnmount,
@@ -43,8 +44,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   let disposed = false,
     revision = 0;
   let queue = Promise.resolve();
-  const rendered = new Set<number>();
-  const tasks = new Set<RenderTask>();
+  const rendered = new Map<number, HTMLCanvasElement>();
+  const tasks = new Map<number, RenderTask>();
   const base = new URL("./pdf-assets/", location.href).href;
 
   function displayWH(index: number) {
@@ -172,36 +173,63 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     );
   }
 
+  function inRenderRange(index: number) {
+    const root = scroll.value;
+    const node = pageEl(index);
+    if (!root || !node) return false;
+    const boundary = root.getBoundingClientRect();
+    const page = node.getBoundingClientRect();
+    return page.bottom >= boundary.top - 600 && page.top <= boundary.bottom + 600;
+  }
+
+  function releaseCanvas(canvas: HTMLCanvasElement) {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+
   function render(index: number) {
     const token = revision;
     queue = queue
       .then(async () => {
-        if (disposed || token !== revision || rendered.has(index) || !pdf)
+        if (disposed || token !== revision || !pdf || !inRenderRange(index))
           return;
         const canvas = pageEl(index)?.querySelector("canvas");
         if (!canvas) return;
+        if (rendered.get(index) === canvas && canvas.width > 0) return;
         const page = await pdf.getPage(index + 1);
-        if (disposed || token !== revision) return;
+        if (disposed || token !== revision || !inRenderRange(index)) return;
         const original = page.getViewport({ scale: 1 });
         await updateSizes([
           { index, width: original.width, height: original.height },
         ]);
-        if (disposed || token !== revision) return;
+        if (disposed || token !== revision || !inRenderRange(index)) return;
         const d = displayWH(index);
-        const ratio = Math.min(devicePixelRatio, 2);
+        const cssScale = scale(d.width, d.height);
+        const ratio = previewPixelRatio(
+          d.width * cssScale,
+          d.height * cssScale,
+          devicePixelRatio,
+        );
         const viewport = page.getViewport({
-          scale: scale(d.width, d.height) * ratio,
+          scale: cssScale * ratio,
           rotation: (page.rotate + rotate.value) % 360,
         });
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        const task = page.render({ canvas, viewport });
-        tasks.add(task);
+        canvas.width = Math.max(1, Math.floor(viewport.width));
+        canvas.height = Math.max(1, Math.floor(viewport.height));
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) return;
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        const task = page.render({ canvas, canvasContext: context, viewport });
+        tasks.set(index, task);
         try {
           await task.promise;
-          if (token === revision) rendered.add(index);
+          if (token === revision && inRenderRange(index)) rendered.set(index, canvas);
         } finally {
-          tasks.delete(task);
+          if (rendered.get(index) !== canvas &&
+              (disposed || token !== revision || !inRenderRange(index)))
+            releaseCanvas(canvas);
+          if (tasks.get(index) === task) tasks.delete(index);
         }
       })
       .catch((e) => {
@@ -213,16 +241,24 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
 
   function observe() {
     observer?.disconnect();
+    for (const [index, canvas] of rendered) {
+      if (pageEl(index)?.querySelector("canvas") !== canvas) {
+        releaseCanvas(canvas);
+        rendered.delete(index);
+      }
+    }
     observer = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
           const i = Number((e.target as HTMLElement).dataset.page);
           if (e.isIntersecting) void render(i);
-          else if (rendered.has(i)) {
-            const c = e.target.querySelector("canvas")!;
-            c.width = 0;
-            c.height = 0;
-            rendered.delete(i);
+          else {
+            tasks.get(i)?.cancel();
+            const canvas = e.target.querySelector("canvas")!;
+            if (rendered.get(i) === canvas) {
+              releaseCanvas(canvas);
+              rendered.delete(i);
+            }
           }
         }
       },
@@ -240,6 +276,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     tasks.forEach((t) => t.cancel());
     await queue;
     if (disposed) return;
+    for (const canvas of rendered.values()) releaseCanvas(canvas);
     rendered.clear();
     await nextTick();
     updateVirtualWindow();
@@ -331,7 +368,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   }
 
   // Re-observe when virtual window slides.
-  watch([virtualStart, virtualEnd], () => {
+  watch([virtualStart, virtualEnd], async () => {
+    await nextTick();
     if (!disposed && pdf) observe();
   });
 
@@ -355,6 +393,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     observer?.disconnect();
     resize?.disconnect();
     tasks.forEach((t) => t.cancel());
+    for (const canvas of rendered.values()) releaseCanvas(canvas);
+    rendered.clear();
     void load?.destroy();
   });
   return {
