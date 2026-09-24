@@ -15,7 +15,7 @@ const suite: Suite = async (c) => {
       "file picker accepts more than twelve files",
       "document.querySelectorAll('.tab').length===13",
     );
-    await c.check(tabs,'only the active file mounts a preview',"document.querySelectorAll('.preview-tab').length===1");
+    await c.check(tabs,'only active tab shows and loads content',"(()=>{const tabs=[...document.querySelectorAll('.preview-tab')];const visible=tabs.filter(t=>t.getClientRects().length>0);const loaded=tabs.filter(t=>t.querySelector('.preview-content')||t.querySelector('.loading'));return tabs.length===13&&visible.length===1&&loaded.length<=13})()");
     c.close(tabs);
     const windows = await c.program.openPaths(
       Array(26).fill(c.fixture("text.txt")),

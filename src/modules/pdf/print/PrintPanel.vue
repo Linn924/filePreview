@@ -14,6 +14,7 @@ const {
   deviceName,
   busy,
   stop,
+  batchProgress,
   selectedCount,
   add,
   applyAll,
@@ -345,7 +346,7 @@ const orderLabel = (o?: string) =>
 
       <p v-if="error" role="alert">{{ error }}</p>
       <footer class="print-footer">
-        <span class="print-foot-note">提交后进入系统队列，是否出纸以队列为准</span>
+        <span class="print-foot-note">{{ batchProgress ? `批量进度 ${batchProgress}` : '提交后进入系统队列，是否出纸以队列为准' }}</span>
         <button type="button" :disabled="busy" @click="choose">添加文件</button>
         <button v-if="busy" type="button" @click="stop = true" :disabled="stop">
           {{ stop ? "将停止" : "停止后续任务" }}

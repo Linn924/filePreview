@@ -30,6 +30,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   GlobalWorkerOptions.workerSrc = workerUrl;
   const scroll = ref<HTMLElement>();
   const layout = ref(0);
+  const textGeometry = ref(0);
   const pages = ref<Array<{ width: number; height: number }>>([]);
   const current = ref(1);
   let pdf: PDFDocumentProxy | undefined,
@@ -46,6 +47,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   let queue = Promise.resolve();
   const rendered = new Map<number, HTMLCanvasElement>();
   const tasks = new Map<number, {task:RenderTask;canvas:HTMLCanvasElement}>();
+  const pending = new Set<number>();
+  const failed = new Set<number>();
+  const retries = new Map<number, number>();
   const base = new URL("./pdf-assets/", location.href).href;
 
   function displayWH(index: number) {
@@ -110,7 +114,6 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     return Math.max(0, total - end);
   });
   const visiblePages = computed(() => {
-    void layout.value;
     const out: number[] = [];
     for (let i = virtualStart.value; i < virtualEnd.value; i++) out.push(i);
     return out;
@@ -159,6 +162,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     for (const p of updates)
       pages.value[p.index] = { width: p.width, height: p.height };
     layout.value++;
+    if (updates.some(p=>p.index>=virtualStart.value&&p.index<virtualEnd.value))
+      textGeometry.value++;
     await nextTick();
     if (!disposed && root && beforeTop !== undefined) {
       const anchorOffsetAfter = offsets.value[anchorPage] || 0;
@@ -188,6 +193,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   }
 
   function render(index: number) {
+    if (pending.has(index) || failed.has(index)) return queue;
+    pending.add(index);
     const token = revision;
     queue = queue
       .then(async () => {
@@ -224,7 +231,10 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         tasks.set(index, {task,canvas});
         try {
           await task.promise;
-          if (token === revision && inRenderRange(index)) rendered.set(index, canvas);
+          if (token === revision && inRenderRange(index)) {
+            rendered.set(index, canvas);
+            retries.delete(index);
+          }
         } finally {
           if (rendered.get(index) !== canvas &&
               (disposed || token !== revision || !inRenderRange(index)))
@@ -233,8 +243,20 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         }
       })
       .catch((e) => {
-        if (!disposed && e?.name !== "RenderingCancelledException")
+        if (!disposed && e?.name !== "RenderingCancelledException") {
+          failed.add(index);
           emit("error", "PDF 页面无法显示：" + String(e));
+        }
+      })
+      .finally(() => {
+        pending.delete(index);
+        if (disposed || token !== revision || failed.has(index) || !inRenderRange(index)) return;
+        const canvas=pageEl(index)?.querySelector('canvas');
+        if (canvas && (rendered.get(index)!==canvas || canvas.width===0)) {
+          const attempts=(retries.get(index)||0)+1;
+          retries.set(index,attempts);
+          if(attempts<=8)requestAnimationFrame(()=>{if(!disposed)void render(index);});
+        }
       });
     return queue;
   }
@@ -273,7 +295,10 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
 
   async function refresh() {
     layout.value++;
+    textGeometry.value++;
     revision++;
+    failed.clear();
+    retries.clear();
     tasks.forEach(({task}) => task.cancel());
     await queue;
     if (disposed) return;
@@ -414,6 +439,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     unlock,
     rotate,
     layout,
+    textGeometry,
     setRotate,
     allowPrint,
   };

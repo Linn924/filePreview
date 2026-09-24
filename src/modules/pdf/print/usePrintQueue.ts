@@ -23,7 +23,8 @@ export function usePrintQueue(initial?: PreviewFile) {
   const files = ref<PrintRow[]>(initial ? [row(initial)] : []),
     deviceName = ref(""),
     busy = ref(false),
-    stop = ref(false);
+    stop = ref(false),
+    batchProgress = ref("");
   const selectedCount = computed(
     () => files.value.filter((r) => r.selected).length,
   );
@@ -55,8 +56,11 @@ export function usePrintQueue(initial?: PreviewFile) {
         options: { ...toRaw(r.options), deviceName: deviceName.value },
       }));
     for (const r of files.value) r.status = r.selected ? "等待" : "未勾选";
+    batchProgress.value = `0/${jobs.length}`;
     try {
+      let done = 0;
       for (const job of jobs) {
+        batchProgress.value = `${done}/${jobs.length}`;
         if (stop.value) {
           job.row.status = "未提交";
           continue;
@@ -76,9 +80,12 @@ export function usePrintQueue(initial?: PreviewFile) {
         } catch (e) {
           job.row.status = "失败：" + printError(e);
         }
+        done++;
+        batchProgress.value = `${done}/${jobs.length}`;
       }
     } finally {
       busy.value = false;
+      batchProgress.value = "";
     }
   }
   return {
@@ -86,6 +93,7 @@ export function usePrintQueue(initial?: PreviewFile) {
     deviceName,
     busy,
     stop,
+    batchProgress,
     selectedCount,
     add,
     applyAll,

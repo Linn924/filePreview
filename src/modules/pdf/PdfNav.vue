@@ -39,7 +39,7 @@ const clientH = ref(400);
 const tasks = new Map<number, RenderTask>();
 /** Single-flight: one paint job per page index; results always persist. */
 const paintJobs = new Map<number, Promise<void>>();
-const paintedPages = new Set<number>();
+const paintedPages = new Map<number, HTMLCanvasElement>();
 let disposed = false;
 let thumbGeneration=0;
 
@@ -254,7 +254,7 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
   if (disposed || !props.pdf) return;
   const canvas = node.querySelector("canvas");
   if (!canvas) return;
-  if (paintedPages.has(pageNumber) && !canvasLooksBlank(canvas)) {
+  if (paintedPages.get(pageNumber) === canvas && !canvasLooksBlank(canvas)) {
     node.classList.add("thumb-painted");
     return;
   }
@@ -290,7 +290,8 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
       await task.promise;
       if(disposed || generation!==thumbGeneration)return;
       // Keep pixels even if user switched to 目录 mid-render.
-      paintedPages.add(pageNumber);
+      if(!node.isConnected)return;
+      paintedPages.set(pageNumber,canvas);
       node.classList.add("thumb-painted");
     } catch (e) {
       if ((e as { name?: string })?.name === "RenderingCancelledException")
@@ -300,6 +301,11 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
     } finally {
       if(task && tasks.get(pageNumber)===task)tasks.delete(pageNumber);
       paintJobs.delete(pageNumber);
+      if(!disposed && tab.value==='thumbs'){
+        const current=thumbHost.value?.querySelector<HTMLElement>(`.thumb[data-page="${pageNumber+1}"]`);
+        if(current && current!==node && current.querySelector('canvas')!==paintedPages.get(pageNumber))
+          requestAnimationFrame(()=>{if(!disposed) schedulePaint();});
+      }
     }
   })();
   paintJobs.set(pageNumber, job);
@@ -317,7 +323,7 @@ function schedulePaint() {
     if (!Number.isFinite(page) || page < 0) continue;
     const canvas = node.querySelector("canvas");
     if (!canvas) continue;
-    if (paintedPages.has(page) && !canvasLooksBlank(canvas)) {
+    if (paintedPages.get(page) === canvas && !canvasLooksBlank(canvas)) {
       node.classList.add("thumb-painted");
       continue;
     }

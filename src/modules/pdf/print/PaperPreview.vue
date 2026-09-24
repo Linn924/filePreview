@@ -12,6 +12,8 @@ import {
 } from "../../../../shared/printing";
 
 const props = defineProps<{ file: PreviewFile; options: PdfPrintOptions }>();
+/** Serialize paper sketch draws so expanding many rows stays responsive. */
+let drawChain: Promise<void> = Promise.resolve();
 const canvas = ref<HTMLCanvasElement>();
 const error = ref("");
 let disposed = false;
@@ -31,7 +33,11 @@ const label = computed(
     `${props.options.paper}${props.options.landscape ? " 横" : " 纵"} · ${scaleLabel.value}`,
 );
 
-async function draw() {
+function draw() {
+  drawChain = drawChain.then(() => drawNow()).catch(() => {});
+  return drawChain;
+}
+async function drawNow() {
   if (!canvas.value) return;
   error.value = "";
   try {

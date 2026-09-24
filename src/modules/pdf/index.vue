@@ -31,6 +31,7 @@ const {
   unlock,
   rotate,
   layout,
+  textGeometry,
   setRotate,
   allowPrint,
 } = usePreview(props, emit);
@@ -280,7 +281,7 @@ async function syncVisibleText(revision: number) {
   if (revision === textGeometryRevision) highlightActiveHit();
 }
 watch([visiblePages, pdf], () => void syncVisibleText(textGeometryRevision));
-watch([() => props.zoom, () => props.fitMode, rotate, layout], () => {
+watch([() => props.zoom, () => props.fitMode, rotate, textGeometry], () => {
   const revision = ++textGeometryRevision;
   void syncVisibleText(revision);
 });

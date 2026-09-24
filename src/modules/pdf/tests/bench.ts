@@ -49,6 +49,35 @@ const suite: Suite = async (c) => {
       `bench ${name} median ${median(samples)}ms (${samples.join("/")})`,
     );
   }
+
+  // Batch preview habit: 10 PDFs in one window, measure tab switches.
+  {
+    const paths = Array.from({ length: 10 }, () => c.fixture("document.pdf"));
+    const tOpen = performance.now();
+    const [batch] = await c.program.openPaths(paths, "tabs");
+    const openMs = Math.round(performance.now() - tOpen);
+    await c.check(
+      batch,
+      "batch-tabs loaded 10 tabs",
+      "document.querySelectorAll('.tab').length===10",
+    );
+    const tSwitch = performance.now();
+    for (let i = 0; i < 20; i++) {
+      await c.evaluate(
+        batch,
+        "document.querySelector('.tabs').dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true}))",
+      );
+    }
+    await c.pause(80);
+    const switchMs = Math.round(performance.now() - tSwitch);
+    records.push({
+      file: "batch-tabs-10",
+      samplesMs: [openMs, switchMs],
+      medianMs: openMs,
+    });
+    c.pass(`bench batch-tabs-10 open ${openMs}ms + 20 switches ${switchMs}ms`);
+    c.close(batch);
+  }
   const outDir = resolve("outputs/bench");
   mkdirSync(outDir, { recursive: true });
   const payload = {

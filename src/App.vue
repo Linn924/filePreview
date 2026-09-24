@@ -381,9 +381,11 @@ onBeforeUnmount(() => {
         </button>
       </nav>
       <PreviewTab
-        v-if="files.some((file) => file.id === active)"
-        :key="active"
-        :file="files.find((file) => file.id === active)!"
+        v-for="file in files"
+        v-show="file.id === active"
+        :key="file.id"
+        :file="file"
+        :active="file.id === active"
         :initial-zoom="settings.defaultZoom"
         :immersive="immersive"
     /></template>

@@ -10,23 +10,100 @@ const props = defineProps<{
   file: PreviewFile;
   initialZoom: number;
   immersive?: boolean;
+  /** Whether this tab is the active tab (for memory cache). */
+  active?: boolean;
 }>();
+/** LRU of recently used loaded bytes (max 3) for instant tab switch. */
+const contentCache = new Map<string, PreviewFile>();
+const CACHE_MAX = 3;
+function cachePut(id: string, file: PreviewFile) {
+  contentCache.delete(id);
+  contentCache.set(id, file);
+  while (contentCache.size > CACHE_MAX) {
+    const oldest = contentCache.keys().next().value as string | undefined;
+    if (!oldest || oldest === id) break;
+    contentCache.delete(oldest);
+  }
+}
 const content=shallowRef<PreviewFile>();
 let disposed=false;
-onMounted(async()=>{
- if(props.file.error){content.value=props.file;return;}
- const loaded=await window.localPreview.loadPreview(props.file);
- if(disposed)return;
- loaded.view=props.file.view;
- content.value=loaded;
- if(loaded.error){error.value=loaded.error;ready.value=true;}
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+/** Stagger loadPreview across tabs so multi-open does not spike CPU. */
+let loadQ: Promise<unknown> = Promise.resolve();
+function enqueueLoad(fn: () => Promise<unknown>) {
+  loadQ = loadQ.then(fn).catch(() => undefined);
+  return loadQ;
+}
+
+async function ensureLoaded() {
+  if (content.value?.bytes?.byteLength || content.value?.error) return content.value;
+  const hit = contentCache.get(props.file.id);
+  if (hit) {
+    hit.view = props.file.view;
+    content.value = hit;
+    ready.value = true;
+    return hit;
+  }
+  if (props.file.error) {
+    content.value = props.file;
+    ready.value = true;
+    return content.value;
+  }
+  ready.value = false;
+  const loaded = await window.localPreview.loadPreview(props.file);
+  if (disposed) return;
+  loaded.view = props.file.view;
+  cachePut(props.file.id, loaded);
+  content.value = loaded;
+  if (loaded.error) {
+    error.value = loaded.error;
+    ready.value = true;
+  }
+  return loaded;
+}
+
+function saveViewState() {
+  props.file.view ??= { zoom: zoom.value, scroll: [] };
+  props.file.view.zoom = zoom.value;
+  props.file.view.fit = fitMode.value;
+  props.file.view.scroll = scrollers().map((el) => ({
+    top: el.scrollTop,
+    left: el.scrollLeft,
+  }));
+}
+
+function scheduleUnload() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (props.active || disposed) return;
+    // Drop mounted module state; keep cache if still LRU-hot.
+    if (!contentCache.has(props.file.id)) content.value = undefined;
+    else content.value = undefined;
+  }, 15000);
+}
+
+onMounted(() => {
+  void enqueueLoad(async () => {
+    await ensureLoaded();
+    if (!props.active) scheduleUnload();
+  });
 });
+watch(
+  () => props.active,
+  (on) => {
+    if (on) {
+      clearTimeout(idleTimer);
+      void enqueueLoad(() => ensureLoaded());
+    } else {
+      saveViewState();
+      scheduleUnload();
+    }
+  },
+);
 onBeforeUnmount(()=>{
  disposed=true;
- props.file.view ??={zoom:zoom.value,scroll:[]};
- props.file.view.zoom=zoom.value;
- props.file.view.fit=fitMode.value;
- props.file.view.scroll=scrollers().map(el=>({top:el.scrollTop,left:el.scrollLeft}));
+ clearTimeout(idleTimer);
+ saveViewState();
  content.value=undefined;
 });
 const module = computed(

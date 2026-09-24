@@ -18,11 +18,16 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
   const active = ref(-1);
   const error = ref("");
   const cache = new Map<number, string>();
+  const MAX_CACHED_PAGES = 32;
   let searchRevision = 0;
 
   async function pageText(n: number) {
     let text = cache.get(n);
-    if (text !== undefined) return text;
+    if (text !== undefined) {
+      cache.delete(n);
+      cache.set(n,text);
+      return text;
+    }
     const doc = pdf.value;
     if (!doc) return "";
     const page = await doc.getPage(n);
@@ -32,6 +37,7 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
       .filter(Boolean);
     text = parts.join(" ").replace(/\s+/g, " ").trim();
     cache.set(n, text);
+    if(cache.size>MAX_CACHED_PAGES)cache.delete(cache.keys().next().value!);
     return text;
   }
 
@@ -61,9 +67,11 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
             length: needle.length,
             text: text.slice(Math.max(0, at - 12), at + needle.length + 18),
           });
-          hits.value = [...found];
-          if (active.value === -1) active.value = 0;
           at = hay.indexOf(needle, at + Math.max(1, needle.length));
+        }
+        if(found.length!==hits.value.length){
+          hits.value=[...found];
+          if(active.value===-1)active.value=0;
         }
       }
     } catch (e) {
@@ -100,5 +108,6 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     prev,
     clear,
     pageText,
+    cacheSize:()=>cache.size,
   };
 }
