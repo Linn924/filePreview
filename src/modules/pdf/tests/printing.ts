@@ -246,7 +246,7 @@ const suite: Suite = async (c) => {
     await c.check(
       win,
       "print go available before stop test",
-      "!!document.querySelector('.pdf-print-panel footer .print-go') && !document.querySelector('.pdf-print-panel footer .print-go')!.disabled",
+      "(()=>{const b=document.querySelector('.pdf-print-panel footer .print-go');return !!b && !b.disabled})()",
     );
     await c.click(win, ".pdf-print-panel footer .print-go");
     await c.check(
