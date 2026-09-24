@@ -234,13 +234,20 @@ const suite: Suite = async (c) => {
       "[...document.querySelectorAll('.print-files li')].every(row=>row.textContent.includes('失败'))",
     );
     if (calls.length !== 4) throw Error("Invalid range submitted a print job");
+    await c.pause(150);
     await c.evaluate(
       win,
       "(()=>{const r=document.querySelector('.print-range input');r.value='2';r.dispatchEvent(new Event('input',{bubbles:true}))})()",
     );
-    await c.click(win, ".apply-print-all");
     await c.pause(80);
+    await c.click(win, ".apply-print-all");
+    await c.pause(150);
     hold = true;
+    await c.check(
+      win,
+      "print go available before stop test",
+      "!!document.querySelector('.pdf-print-panel footer .print-go') && !document.querySelector('.pdf-print-panel footer .print-go')!.disabled",
+    );
     await c.click(win, ".pdf-print-panel footer .print-go");
     await c.check(
       win,
