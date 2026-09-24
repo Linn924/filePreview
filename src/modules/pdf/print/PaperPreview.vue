@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, toRaw } from "vue";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { openCachedPdf } from "../docCache";
 import type { PreviewFile } from "../../../../shared/contracts";
 import {
   paperSize,
@@ -17,7 +16,7 @@ let drawChain: Promise<void> = Promise.resolve();
 const canvas = ref<HTMLCanvasElement>();
 const error = ref("");
 let disposed = false;
-let loading: ReturnType<typeof getDocument> | undefined;
+let loading: { destroy?: () => Promise<void> } | undefined;
 
 const paper = computed(() => paperSize(props.options));
 const scaleLabel = computed(
@@ -41,12 +40,9 @@ async function drawNow() {
   if (!canvas.value) return;
   error.value = "";
   try {
-    GlobalWorkerOptions.workerSrc = workerUrl;
-    void loading?.destroy();
-    const source=await window.localPreview.loadPreview(toRaw(props.file));
-    if(disposed||source.error)return;
-    loading = getDocument({ data: source.bytes.slice() });
-    const pdf = await loading.promise;
+    const source = await window.localPreview.loadPreview(toRaw(props.file));
+    if (disposed || source.error) return;
+    const pdf = await openCachedPdf(props.file.id + ":print", source.bytes.slice());
     if (disposed) return;
     const ranged = selectedPages(props.options.range || "", pdf.numPages);
     const pages = applyPageOrder(ranged, props.options.pageOrder || "forward");
@@ -81,7 +77,7 @@ watch(
 onMounted(() => void draw());
 onBeforeUnmount(() => {
   disposed = true;
-  void loading?.destroy();
+  
 });
 </script>
 <template>

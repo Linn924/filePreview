@@ -242,7 +242,11 @@ const suite: Suite = async (c) => {
     await c.pause(80);
     hold = true;
     await c.click(win, ".pdf-print-panel footer .print-go");
-    await c.pause(120);
+    await c.check(
+      win,
+      "busy batch shows stop control",
+      "!![...document.querySelectorAll('.pdf-print-panel footer button')].find((b)=>b.textContent&&b.textContent.includes('停止'))",
+    );
     for (let i = 0; i < 100 && !release; i++) await c.pause(50);
     if (!release) throw Error("Print job not ready for stop test");
     await c.click(

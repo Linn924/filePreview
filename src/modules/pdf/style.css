@@ -29,6 +29,7 @@
 }
 
 .pdf-page {
+  contain: layout paint style;
   position: relative;
   margin: 0 auto 24px;
   background: white;

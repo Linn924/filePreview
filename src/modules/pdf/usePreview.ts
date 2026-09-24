@@ -2,6 +2,7 @@ import { fitScale } from "../../composables/fit";
 import { previewError } from "../../../shared/previewError";
 import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 import { previewPixelRatio } from "./bitmap";
+import { openCachedPdf, releaseDoc } from "./docCache";
 import {
   onMounted,
   onBeforeUnmount,
@@ -321,19 +322,17 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     passwordError.value = "";
     try {
       void load?.destroy();
-      load = getDocument({
-        data: props.file.bytes.slice(),
-        password,
+      const doc = await openCachedPdf(props.file.id, props.file.bytes.slice(), {
         cMapUrl: base + "cmaps/",
         cMapPacked: true,
         standardFontDataUrl: base + "standard_fonts/",
         wasmUrl: base + "wasm/",
-        useSystemFonts: true,
       });
-      pdf = await load.promise;
-      pdfRef.value = pdf;
+      pdf = doc;
+      load = undefined;
+      pdfRef.value = doc;
       try {
-        const perms = (await pdf.getPermissions()) as number | null;
+        const perms = (await doc.getPermissions()) as number | null;
         // null/undefined = unlimited; otherwise bit flags (PDF.js PermissionFlag)
         if (perms == null) allowPrint.value = true;
         else allowPrint.value = ((Number(perms) & 4) === 4); // PRINT = 0x04
@@ -341,15 +340,15 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         allowPrint.value = true;
       }
       if (disposed) return;
-      const first = await pdf.getPage(1);
+      const first = await doc.getPage(1);
       if (disposed) return;
       const initial = first.getViewport({ scale: 1 });
-      pages.value = Array.from({ length: pdf.numPages }, () => ({
+      pages.value = Array.from({ length: doc.numPages }, () => ({
         width: initial.width,
         height: initial.height,
       }));
       virtualStart.value = 0;
-      virtualEnd.value = Math.min(pdf.numPages, 3);
+      virtualEnd.value = Math.min(doc.numPages, 3);
       await nextTick();
       updateVirtualWindow();
       await render(virtualStart.value);
@@ -362,9 +361,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       emit("ready");
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       let sizes: Array<{ index: number; width: number; height: number }> = [];
-      for (let n = 2; n <= pdf.numPages; n++) {
+      for (let n = 2; n <= doc.numPages; n++) {
         if (disposed) return;
-        const p = await pdf.getPage(n);
+        const p = await doc.getPage(n);
         if (disposed) return;
         const v = p.getViewport({ scale: 1 });
         sizes.push({ index: n - 1, width: v.width, height: v.height });
@@ -421,7 +420,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     tasks.forEach(({task}) => task.cancel());
     for (const canvas of rendered.values()) releaseCanvas(canvas);
     rendered.clear();
-    void load?.destroy();
+    load?.destroy?.();
   });
   return {
     scroll,
