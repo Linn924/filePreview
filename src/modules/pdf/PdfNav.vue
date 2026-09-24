@@ -26,10 +26,12 @@ interface OutlineNode {
 }
 const outline = ref<OutlineNode[]>([]);
 const collapsed = ref(new Set<string>());
+const outlineHost=ref<HTMLElement>();
 const thumbHost = ref<HTMLElement>();
-const THUMB_CSS_W = 112;
+const navWidth=ref(168);
+const thumbCssW=computed(()=>navWidth.value-56);
 const THUMB_GAP = 10;
-const EST_H = 148;
+const estimateHeight=computed(()=>Math.round(thumbCssW.value*1.32));
 const pageCount = ref(0);
 const heights = ref<number[]>([]);
 const scrollTop = ref(0);
@@ -39,6 +41,7 @@ const tasks = new Map<number, RenderTask>();
 const paintJobs = new Map<number, Promise<void>>();
 const paintedPages = new Set<number>();
 let disposed = false;
+let thumbGeneration=0;
 
 async function loadOutline() {
   outline.value = [];
@@ -123,6 +126,52 @@ const currentOutlineKey = computed(() => {
   }
   return hit;
 });
+watch(currentOutlineKey,async key=>{
+ if(!key)return;
+ const byKey=new Map(outline.value.map(item=>[item.key,item]));
+ const next=new Set(collapsed.value);
+ let parent=byKey.get(key)?.parentKey;
+ while(parent){next.delete(parent);parent=byKey.get(parent)?.parentKey??null;}
+ if(next.size!==collapsed.value.size)collapsed.value=next;
+ await nextTick();
+ const item=Array.from(outlineHost.value?.querySelectorAll<HTMLElement>('.outline-row')||[])
+  .find(row=>row.dataset.outlineKey===key);
+ if(item&&outlineHost.value){
+  const view=outlineHost.value.getBoundingClientRect(),rect=item.getBoundingClientRect();
+  if(rect.top<view.top||rect.bottom>view.bottom)item.scrollIntoView({block:'nearest'});
+ }
+});
+
+function resetThumbs(){
+ thumbGeneration++;
+ for(const task of tasks.values())task.cancel();
+ paintedPages.clear();
+ heights.value=Array.from({length:pageCount.value},()=>estimateHeight.value);
+ thumbHost.value?.querySelectorAll<HTMLElement>('.thumb').forEach(node=>{
+  node.classList.remove('thumb-painted');
+  const canvas=node.querySelector('canvas');if(canvas){canvas.width=0;canvas.height=0;}
+ });
+ const active=[...paintJobs.values()];
+ void Promise.allSettled(active).then(()=>nextTick()).then(()=>{if(!disposed){updateVirtual();schedulePaint();}});
+}
+function setNavWidth(value:number){
+ const next=Math.max(168,Math.min(320,Math.round(value)));
+ if(next===navWidth.value)return;
+ navWidth.value=next;
+ resetThumbs();
+}
+function beginResize(event:PointerEvent){
+ if(event.button!==0)return;
+ event.preventDefault();
+ const handle=event.currentTarget as HTMLElement;
+ const startX=event.clientX,startWidth=navWidth.value;
+ handle.setPointerCapture(event.pointerId);
+ const move=(e:PointerEvent)=>{navWidth.value=Math.max(168,Math.min(320,startWidth+e.clientX-startX));};
+ const end=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);resetThumbs();};
+ handle.addEventListener('pointermove',move);
+ handle.addEventListener('pointerup',end);
+ handle.addEventListener('pointercancel',end);
+}
 
 function initThumbsMeta() {
   paintedPages.clear();
@@ -132,16 +181,16 @@ function initThumbsMeta() {
     return;
   }
   pageCount.value = props.pdf.numPages;
-  heights.value = Array.from({ length: props.pdf.numPages }, () => EST_H);
+  heights.value = Array.from({ length: props.pdf.numPages }, () => estimateHeight.value);
 }
 
 async function ensureSize(index: number) {
   if (!props.pdf) return;
-  if (heights.value[index] !== EST_H) return;
+  if (heights.value[index] !== estimateHeight.value) return;
   try {
     const page = await props.pdf.getPage(index + 1);
     const v = page.getViewport({ scale: 1 });
-    const h = Math.round((v.height / (v.width || 1)) * THUMB_CSS_W) || EST_H;
+    const h = Math.round((v.height / (v.width || 1)) * thumbCssW.value) || estimateHeight.value;
     heights.value[index] = h;
   } catch {
     /* keep estimate */
@@ -211,16 +260,18 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
   }
   const running = paintJobs.get(pageNumber);
   if (running) return running;
+  const generation=thumbGeneration;
+  let task:RenderTask|undefined;
   const job = (async () => {
     try {
       const pdfPage = await props.pdf!.getPage(pageNumber + 1);
-      if (disposed) return;
+      if (disposed || generation!==thumbGeneration) return;
       const base = pdfPage.getViewport({ scale: 1 });
-      const cssW = THUMB_CSS_W;
+      const cssW = thumbCssW.value;
       const cssH =
         Math.round((base.height / (base.width || 1)) * cssW) ||
         canvas.clientHeight ||
-        EST_H;
+        estimateHeight.value;
       heights.value[pageNumber] = cssH;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const viewport = pdfPage.getViewport({
@@ -234,9 +285,10 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
       if (!ctx) return;
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      const task = pdfPage.render({ canvasContext: ctx, viewport, canvas });
+      task = pdfPage.render({ canvasContext: ctx, viewport, canvas });
       tasks.set(pageNumber, task);
       await task.promise;
+      if(disposed || generation!==thumbGeneration)return;
       // Keep pixels even if user switched to 目录 mid-render.
       paintedPages.add(pageNumber);
       node.classList.add("thumb-painted");
@@ -246,7 +298,7 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
       node.classList.remove("thumb-painted");
       paintedPages.delete(pageNumber);
     } finally {
-      tasks.delete(pageNumber);
+      if(task && tasks.get(pageNumber)===task)tasks.delete(pageNumber);
       paintJobs.delete(pageNumber);
     }
   })();
@@ -288,7 +340,7 @@ watch(
     const idx = props.current - 1;
     if (idx < 0) return;
     const top = offsets.value[idx] || 0;
-    const h = heights.value[idx] || EST_H;
+    const h = heights.value[idx] || estimateHeight.value;
     const host = thumbHost.value;
     const viewTop = host.scrollTop;
     const viewBottom = viewTop + host.clientHeight;
@@ -345,7 +397,7 @@ onBeforeUnmount(() => {
 const hasOutline = computed(() => outline.value.length > 0);
 </script>
 <template>
-  <aside class="pdf-nav" aria-label="PDF 导航">
+  <aside class="pdf-nav" aria-label="PDF 导航" :style="{width:navWidth+'px'}">
     <div class="pdf-nav-tabs" role="tablist">
       <button
         type="button"
@@ -369,6 +421,7 @@ const hasOutline = computed(() => outline.value.length > 0);
     </div>
     <div
       v-show="tab === 'outline'"
+      ref="outlineHost"
       class="pdf-outline"
       role="tabpanel"
       aria-label="目录"
@@ -379,6 +432,7 @@ const hasOutline = computed(() => outline.value.length > 0);
           v-for="item in visibleOutline"
           :key="item.key"
           class="outline-row"
+          :data-outline-key="item.key"
           :style="{ paddingLeft: 6 + item.depth * 12 + 'px' }"
         >
           <button
@@ -413,6 +467,16 @@ const hasOutline = computed(() => outline.value.length > 0);
     </div>
     <div
       v-show="tab === 'thumbs'"
+      class="thumb-pane"
+    >
+      <label class="thumb-size-control">缩略图尺寸
+        <select class="thumb-size-select" :value="navWidth" aria-label="缩略图尺寸" @change="setNavWidth(Number(($event.target as HTMLSelectElement).value))">
+          <option :value="168">小</option><option :value="216">中</option><option :value="272">大</option>
+        </select>
+      </label>
+    </div>
+    <div
+      v-show="tab === 'thumbs'"
       ref="thumbHost"
       class="pdf-thumbs"
       role="tabpanel"
@@ -439,7 +503,7 @@ const hasOutline = computed(() => outline.value.length > 0);
         @keydown.enter="emit('jump', i + 1)"
       >
         <canvas
-          :style="{ width: THUMB_CSS_W + 'px', height: heights[i] + 'px' }"
+          :style="{ width: thumbCssW + 'px', height: heights[i] + 'px' }"
         ></canvas>
         <span>{{ i + 1 }}</span>
       </div>
@@ -449,5 +513,6 @@ const hasOutline = computed(() => outline.value.length > 0);
         :style="{ height: padBottom + 'px' }"
       ></div>
     </div>
+    <span class="pdf-nav-resizer" role="separator" tabindex="0" aria-label="拖动调整导航栏宽度" aria-orientation="vertical" @pointerdown="beginResize" @keydown.left.prevent="setNavWidth(navWidth-16)" @keydown.right.prevent="setNavWidth(navWidth+16)"></span>
   </aside>
 </template>

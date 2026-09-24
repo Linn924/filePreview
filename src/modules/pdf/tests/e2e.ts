@@ -2,7 +2,19 @@ import type { Suite } from "../../../../tests/context";
 import { checkContinuous } from "../../../../tests/continuous";
 import { longFixture } from "./longFixture";
 import {linkFixture} from './linkFixture';
+import {outlineFixture} from './outlineFixture';
 const suite: Suite = async (c) => {
+  async function dragAt(win:import('electron').BrowserWindow,selector:string,button:'left'|'middle',dx:number,dy:number){
+    win.show();win.focus();await c.pause(150);
+    const point=await c.evaluate<{x:number;y:number}>(win,`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.left+Math.min(160,r.width/2),y:r.top+Math.min(130,r.height/2)}})()`);
+    win.webContents.debugger.attach('1.3');
+    try{
+      await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button,clickCount:1});
+      await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x+dx,y:point.y+dy,button,buttons:button==='middle'?4:1});
+      await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x+dx,y:point.y+dy,button,clickCount:1});
+    }finally{win.webContents.debugger.detach();}
+    await c.pause(180);
+  }
   const win = await c.open("document.pdf");
   await c.check(
     win,
@@ -25,15 +37,28 @@ const suite: Suite = async (c) => {
   );
   await c.snapshot(win, "pdf");
   c.close(win);
+  const pan=await c.open('document.pdf');
+  pan.unmaximize();pan.setSize(850,650);
+  await c.evaluate(pan,"(()=>{const z=document.querySelector('.zoom-control input');z.value='400';z.dispatchEvent(new Event('input',{bubbles:true}));z.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()");
+  await c.check(pan,'zoomed PDF supports horizontal scrolling',"(()=>{const r=document.querySelector('.pdf-scroll');return r.scrollWidth>r.clientWidth+300})()");
+  await c.evaluate(pan,"(()=>{const r=document.querySelector('.pdf-scroll');r.scrollLeft=160;r.scrollTop=160})()");
+  await dragAt(pan,'.pdf-scroll','middle',-80,-55);
+  await c.check(pan,'middle-button drag pans PDF',"(()=>{const r=document.querySelector('.pdf-scroll');return r.scrollLeft>205&&r.scrollTop>185})()");
+  await c.evaluate(pan,"window.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',key:' ',bubbles:true,cancelable:true}))");
+  const beforeSpace=await c.evaluate<number>(pan,"document.querySelector('.pdf-scroll').scrollLeft");
+  await dragAt(pan,'.pdf-scroll','left',-70,0);
+  await c.evaluate(pan,"window.dispatchEvent(new KeyboardEvent('keyup',{code:'Space',key:' ',bubbles:true}))");
+  await c.check(pan,'Space plus left drag pans PDF',`document.querySelector('.pdf-scroll').scrollLeft>${beforeSpace+35}`);
+  c.close(pan);
   longFixture(c.fixture("long-mixed.pdf"));
   const long = await c.open("long-mixed.pdf");
   long.unmaximize();
   long.setSize(1000, 700);
   await c.pause(250);
   await c.check(long, "long PDF first page painted and full page count available",
-    "document.querySelectorAll('.pdf-page').length<=20 && document.querySelector('.page-nav input').max==='80' && [...document.querySelectorAll('.pdf-page canvas')].some(c=>c.width>0)");
-  await c.check(long, "long PDF DOM stays virtualized",
-    "document.querySelectorAll('.pdf-page').length<40 && document.querySelectorAll('.pdf-virtual-pad').length>=1");
+    "(()=>{const total=Number(document.querySelector('.page-nav input').max);const dom=document.querySelectorAll('.pdf-page').length;const painted=[...document.querySelectorAll('.pdf-page canvas')].some(c=>c.width>0);return total===80&&dom<=Math.ceil(total*0.25)&&painted})()");
+  await c.check(long, "long PDF DOM stays virtualized — nodes well below total pages",
+    "(()=>{const total=Number(document.querySelector('.page-nav input').max);const dom=document.querySelectorAll('.pdf-page').length;const hasPads=document.querySelectorAll('.pdf-virtual-pad').length>=1;return hasPads&&dom<=Math.ceil(total*0.15)})()");
   await c.evaluate(long, "(()=>{const p=document.querySelector('.page-nav input');p.value='80';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
   await c.check(long, "long PDF last page renders after jump",
     "document.querySelector('.page-nav input').value==='80' && [...document.querySelectorAll('.pdf-page')].some(el=>el.dataset.page==='79'&&el.querySelector('canvas')?.width>0)");
@@ -166,6 +191,10 @@ const suite: Suite = async (c) => {
     "thumbnail canvas has non-zero size after paint",
     `[...document.querySelectorAll('.thumb canvas')].some(c=>c.width>0&&c.height>0)`,
   );
+  await c.evaluate(searchWin,"(()=>{const s=document.querySelector('.thumb-size-select');s.value='272';s.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(searchWin,'large thumbnail size changes sidebar and paint',"(()=>{const nav=document.querySelector('.pdf-nav'),canvas=document.querySelector('.thumb.thumb-painted canvas');return nav.getBoundingClientRect().width>=270&&canvas?.style.width==='216px'&&canvas.width>0})()");
+  await dragAt(searchWin,'.pdf-nav-resizer','left',30,0);
+  await c.check(searchWin,'dragging sidebar widens thumbnails',"(()=>{const nav=document.querySelector('.pdf-nav'),canvas=document.querySelector('.thumb.thumb-painted canvas');return nav.getBoundingClientRect().width>=295&&parseFloat(canvas?.style.width||'0')>=240})()");
   // Switch outline <-> thumbs several times: canvases must stay painted (no blank).
   for (let i = 0; i < 4; i++) {
     await c.click(searchWin, ".pdf-nav-tab", "目录");
@@ -315,13 +344,47 @@ const suite: Suite = async (c) => {
       return style.pointerEvents === 'auto' && style.userSelect === 'text';
     })()`,
   );
+  const selectText="(()=>{const span=document.querySelector('.pdf-page[data-page=\"0\"] .pdf-text-layer span');const range=document.createRange();range.selectNodeContents(span);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);document.querySelector('.pdf-scroll').dispatchEvent(new MouseEvent('mouseup',{bubbles:true}))})()";
+  await c.evaluate(selWin,selectText);
+  await c.check(selWin,'selected text offers memory highlight',"!!document.querySelector('.pdf-mark-highlight')");
+  await c.click(selWin,'.pdf-mark-highlight');
+  await c.check(selWin,'highlight appears on PDF page',"!!document.querySelector('.pdf-user-mark.highlight')");
+  await c.evaluate(selWin,selectText);
+  await c.click(selWin,'.pdf-mark-note');
+  await c.check(selWin,'memory note can be edited',"document.querySelectorAll('.pdf-note').length===2&&!!document.querySelector('.pdf-note textarea')");
+  await c.evaluate(selWin,"(()=>{const t=document.querySelector('.pdf-note textarea');t.value='仅本次预览';t.dispatchEvent(new Event('input',{bubbles:true}))})()");
+  await c.check(selWin,'note edit is kept in current session',"document.querySelector('.pdf-note textarea').value==='仅本次预览'");
+  await c.click(selWin,'.pdf-rotate');
+  await c.check(selWin,'memory marks survive rotation',"document.querySelectorAll('.pdf-user-mark').length>=2");
   c.close(selWin);
+  const reopenedNotes=await c.open('document.pdf');
+  await c.click(reopenedNotes,'.pdf-notes-toggle');
+  await c.check(reopenedNotes,'closing document clears temporary notes',"document.querySelector('.pdf-notes').textContent.includes('0')&&!document.querySelector('.pdf-user-mark')");
+  c.close(reopenedNotes);
+  const tabbed=(await c.program.openPaths([c.fixture('document.pdf'),c.fixture('text.txt')],'tabs'))[0];
+  await c.check(tabbed,'tabbed PDF text ready',"!!document.querySelector('.pdf-page .pdf-text-layer[data-built=\"1\"] span')");
+  await c.evaluate(tabbed,selectText);
+  await c.click(tabbed,'.pdf-mark-highlight');
+  await c.click(tabbed,'.tab .tab-name','text.txt');
+  await c.click(tabbed,'.tab .tab-name','document.pdf');
+  await c.check(tabbed,'temporary mark survives switching tabs',"!!document.querySelector('.pdf-user-mark.highlight')");
+  c.close(tabbed);
+
+  outlineFixture(c.fixture('outlined-pages.pdf'));
+  const outlined=await c.open('outlined-pages.pdf');
+  await c.click(outlined,'.pdf-nav-toggle');
+  await c.check(outlined,'first chapter follows opening page',"document.querySelector('.outline-item.current')?.textContent.includes('Section One')");
+  await c.evaluate(outlined,"(()=>{const p=document.querySelector('.page-nav input');p.value='3';p.dispatchEvent(new Event('change',{bubbles:true}))})()");
+  await c.check(outlined,'chapter follows page three',"document.querySelector('.outline-item.current')?.textContent.includes('Section Two')");
+  await c.check(outlined,'active chapter scrolls into view',"(()=>{const host=document.querySelector('.pdf-outline'),item=host?.querySelector('.outline-item.current');if(!host||!item)return false;const h=host.getBoundingClientRect(),r=item.getBoundingClientRect();return r.top>=h.top&&r.bottom<=h.bottom+2&&host.scrollTop>0})()");
+  c.close(outlined);
 
   // Rotation and fit must rebuild selectable text and link hit areas in the
   // same page coordinates used by the visible bitmap.
   linkFixture(c.fixture('linked-pages.pdf'));
   const linked=await c.open('linked-pages.pdf');
   await c.check(linked,'link overlay and text layer available',"!!document.querySelector('.pdf-annot-layer a')&&!!document.querySelector('.pdf-text-layer[data-built=\"1\"] span')");
+  await c.pause(250);
   const initial=await c.evaluate<{x:number;linkX:number;geometry:string}>(linked,"(()=>{const page=document.querySelector('.pdf-page');const span=page.querySelector('.pdf-text-layer span');const link=page.querySelector('.pdf-annot-layer a');return{x:span.getBoundingClientRect().left-page.getBoundingClientRect().left,linkX:link.getBoundingClientRect().left-page.getBoundingClientRect().left,geometry:page.querySelector('.pdf-text-layer').dataset.geometry}})()");
   await c.click(linked,'.pdf-rotate');
   await c.check(linked,'rotation rebuilds text and link positions',`(()=>{const page=document.querySelector('.pdf-page[data-page="0"]');const layer=page?.querySelector('.pdf-text-layer');const span=layer?.querySelector('span');const link=page?.querySelector('.pdf-annot-layer a');if(!span||!link||layer.dataset.built!=='1'||layer.dataset.geometry===${JSON.stringify(initial.geometry)})return false;const x=span.getBoundingClientRect().left-page.getBoundingClientRect().left;const lx=link.getBoundingClientRect().left-page.getBoundingClientRect().left;return Math.abs(x-${initial.x})>10&&Math.abs(lx-${initial.linkX})>10})()`);

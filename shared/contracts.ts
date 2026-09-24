@@ -12,6 +12,8 @@ export interface PreviewFile {
     encoding?: string;
     /** PDF temporary rotation in degrees; does not modify the source file. */
     rotate?: 0 | 90 | 180 | 270;
+    /** PDF marks exist only in the active in-memory preview session. */
+    pdfNotes?: PdfTemporaryMark[];
     excel?: {
       sheet: string;
       columns: number;
@@ -21,6 +23,15 @@ export interface PreviewFile {
     /** Word temporary table column widths: `tableIndex:colIndex` → px. */
     word?: { widths: Record<string, number> };
   };
+}
+export interface PdfTemporaryMark {
+  id:string;
+  page:number;
+  quote:string;
+  content:string;
+  kind:'highlight'|'note';
+  rotation:0|90|180|270;
+  rects:Array<{x:number;y:number;width:number;height:number}>;
 }
 export type Theme = "light" | "dark" | "system";
 export type PrintEntry = "all" | "current" | "none";

@@ -45,7 +45,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     revision = 0;
   let queue = Promise.resolve();
   const rendered = new Map<number, HTMLCanvasElement>();
-  const tasks = new Map<number, RenderTask>();
+  const tasks = new Map<number, {task:RenderTask;canvas:HTMLCanvasElement}>();
   const base = new URL("./pdf-assets/", location.href).href;
 
   function displayWH(index: number) {
@@ -221,7 +221,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         context.fillStyle = "#fff";
         context.fillRect(0, 0, canvas.width, canvas.height);
         const task = page.render({ canvas, canvasContext: context, viewport });
-        tasks.set(index, task);
+        tasks.set(index, {task,canvas});
         try {
           await task.promise;
           if (token === revision && inRenderRange(index)) rendered.set(index, canvas);
@@ -229,7 +229,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
           if (rendered.get(index) !== canvas &&
               (disposed || token !== revision || !inRenderRange(index)))
             releaseCanvas(canvas);
-          if (tasks.get(index) === task) tasks.delete(index);
+          if (tasks.get(index)?.task === task) tasks.delete(index);
         }
       })
       .catch((e) => {
@@ -253,8 +253,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
           const i = Number((e.target as HTMLElement).dataset.page);
           if (e.isIntersecting) void render(i);
           else {
-            tasks.get(i)?.cancel();
             const canvas = e.target.querySelector("canvas")!;
+            const running=tasks.get(i);
+            if(running?.canvas===canvas)running.task.cancel();
             if (rendered.get(i) === canvas) {
               releaseCanvas(canvas);
               rendered.delete(i);
@@ -273,7 +274,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   async function refresh() {
     layout.value++;
     revision++;
-    tasks.forEach((t) => t.cancel());
+    tasks.forEach(({task}) => task.cancel());
     await queue;
     if (disposed) return;
     for (const canvas of rendered.values()) releaseCanvas(canvas);
@@ -392,7 +393,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     revision++;
     observer?.disconnect();
     resize?.disconnect();
-    tasks.forEach((t) => t.cancel());
+    tasks.forEach(({task}) => task.cancel());
     for (const canvas of rendered.values()) releaseCanvas(canvas);
     rendered.clear();
     void load?.destroy();

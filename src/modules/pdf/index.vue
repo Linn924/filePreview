@@ -6,6 +6,9 @@ import { usePdfSearch, type SearchHit } from "./useSearch";
 import PageNavigation from "../../components/PageNavigation.vue";
 import PdfSearch from "./PdfSearch.vue";
 import PdfNav from "./PdfNav.vue";
+import {usePan} from './usePan';
+import {useAnnotations} from './useAnnotations';
+import PdfNotes from './PdfNotes.vue';
 const props = defineProps<PreviewProps>();
 const emit = defineEmits<{
   ready: [];
@@ -36,6 +39,14 @@ provide("pdfAllowPrint", allowPrint);
 const searchOpen = ref(false);
 const navOpen = ref(false);
 const passwordInput = ref("");
+const {panning}=usePan(scroll);
+const annotations=useAnnotations(props.file);
+const notesOpen=ref(false);
+function captureNotes(){if(!panning.value)annotations.capture(scroll.value??null,rotate.value);}
+function addMark(kind:'highlight'|'note'){
+ annotations.add(kind);
+ if(kind==='note')notesOpen.value=true;
+}
 let textGeometryRevision = 0;
 function cycleRotate() {
   const next = (((rotate.value + 90) % 360) as 0 | 90 | 180 | 270);
@@ -342,6 +353,9 @@ onBeforeUnmount(() => {
           </svg>
           <span class="sr-only">旋转 {{ rotate }}°</span>
         </button>
+        <button type="button" class="pdf-notes-toggle icon-only-btn" :aria-pressed="notesOpen" :title="'本次批注（'+annotations.notes.value.length+'）'" aria-label="本次批注" @click="notesOpen=!notesOpen"><svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 12.5h10M4 9l6.5-6.5 2 2L6 11H4z"/></svg></button>
+        <button v-if="annotations.pending.value" type="button" class="pdf-mark-highlight" @click="addMark('highlight')">高亮</button>
+        <button v-if="annotations.pending.value" type="button" class="pdf-mark-note" @click="addMark('note')">写备注</button>
       </span>
     </Teleport>
     <form
@@ -368,12 +382,15 @@ onBeforeUnmount(() => {
         :current="current"
         @jump="jump"
       />
+      <PdfNotes v-if="notesOpen" :notes="annotations.notes.value" @jump="jump" @remove="annotations.remove"/>
       <div
         ref="scroll"
         class="pdf-scroll"
+        :class="{'is-panning':panning}"
         tabindex="0"
         @scroll.passive="sync"
         @keydown="onKeydown"
+        @mouseup="captureNotes"
       >
         <div v-if="padTop > 0" class="pdf-virtual-pad" :style="{ height: padTop + 'px' }" aria-hidden="true"></div>
         <div
@@ -389,6 +406,7 @@ onBeforeUnmount(() => {
         >
           <canvas :aria-label="'PDF 第 ' + (index + 1) + ' 页'"></canvas>
           <div class="pdf-text-layer"></div>
+          <div class="pdf-user-layer" aria-hidden="true"><template v-for="mark in annotations.onPage(index+1)" :key="mark.id"><span v-for="(rect,i) in mark.rects" :key="i" class="pdf-user-mark" :class="mark.kind" :style="annotations.rectStyle(mark,rect,rotate)"></span></template></div>
         </div>
         <div v-if="padBottom > 0" class="pdf-virtual-pad" :style="{ height: padBottom + 'px' }" aria-hidden="true"></div>
       </div>
