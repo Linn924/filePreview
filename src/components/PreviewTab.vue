@@ -13,17 +13,32 @@ const props = defineProps<{
   /** Whether this tab is the active tab (for memory cache). */
   active?: boolean;
 }>();
-/** LRU of recently used loaded bytes (max 3) for instant tab switch. */
+/**
+ * Cache loaded bytes for EVERY open tab so batch switch-back is instant
+ * (invoice multi-view habit). Idle only drops mounted DOM, not bytes.
+ * Evict only when total cache exceeds CACHE_BUDGET_BYTES (LRU).
+ */
 const contentCache = new Map<string, PreviewFile>();
-const CACHE_MAX = 3;
+const CACHE_BUDGET_BYTES = 512 * 1024 * 1024;
+let cacheBytes = 0;
 function cachePut(id: string, file: PreviewFile) {
+  const prev = contentCache.get(id);
+  if (prev) cacheBytes -= prev.bytes?.byteLength || 0;
   contentCache.delete(id);
   contentCache.set(id, file);
-  while (contentCache.size > CACHE_MAX) {
+  cacheBytes += file.bytes?.byteLength || 0;
+  while (cacheBytes > CACHE_BUDGET_BYTES && contentCache.size > 1) {
     const oldest = contentCache.keys().next().value as string | undefined;
     if (!oldest || oldest === id) break;
+    const gone = contentCache.get(oldest);
+    cacheBytes -= gone?.bytes?.byteLength || 0;
     contentCache.delete(oldest);
   }
+}
+function cacheDrop(id: string) {
+  const gone = contentCache.get(id);
+  cacheBytes -= gone?.bytes?.byteLength || 0;
+  contentCache.delete(id);
 }
 const content=shallowRef<PreviewFile>();
 let disposed=false;
@@ -76,9 +91,8 @@ function scheduleUnload() {
   clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
     if (props.active || disposed) return;
-    // Drop mounted module state; keep cache if still LRU-hot.
-    if (!contentCache.has(props.file.id)) content.value = undefined;
-    else content.value = undefined;
+    // Drop mounted module/PDF.js state only; bytes stay in contentCache.
+    content.value = undefined;
   }, 15000);
 }
 
@@ -105,6 +119,7 @@ onBeforeUnmount(()=>{
  clearTimeout(idleTimer);
  saveViewState();
  content.value=undefined;
+ cacheDrop(props.file.id);
 });
 const module = computed(
   () => getPreviewModule(props.file.ext) as PreviewModule | undefined,
