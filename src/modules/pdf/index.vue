@@ -9,6 +9,7 @@ import PdfNav from "./PdfNav.vue";
 import {usePan} from './usePan';
 import {useAnnotations} from './useAnnotations';
 import PdfNotes from './PdfNotes.vue';
+import { pageTextContent } from './textCache';
 const props = defineProps<PreviewProps>();
 const emit = defineEmits<{
   ready: [];
@@ -176,7 +177,7 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
   try {
     const page = await doc.getPage(index + 1);
     if (!layer.isConnected || layer.dataset.loading !== revision) return;
-    const content = await page.getTextContent();
+    const content = await pageTextContent(doc, index + 1);
     if (!layer.isConnected || layer.dataset.loading !== revision) return;
     const cssW = pageEl.clientWidth || parseFloat(pageEl.style.width) || 1;
     const rotation = (page.rotate + rotate.value) % 360;
@@ -276,12 +277,16 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
 async function syncVisibleText(revision: number) {
   await nextTick();
   if (revision !== textGeometryRevision) return;
-  await Promise.all(Array.from(scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") || [])
-    .map(el => buildTextLayer(el, Number(el.dataset.page))));
+  const elements = Array.from(scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") || []);
+  elements.sort((a,b)=>Math.abs(Number(a.dataset.page)+1-current.value)-Math.abs(Number(b.dataset.page)+1-current.value));
+  for (const el of elements) {
+    if (revision !== textGeometryRevision) return;
+    await buildTextLayer(el, Number(el.dataset.page));
+  }
   if (revision === textGeometryRevision) highlightActiveHit();
 }
 watch([visiblePages, pdf], () => void syncVisibleText(textGeometryRevision));
-watch([() => props.zoom, () => props.fitMode, rotate, textGeometry], () => {
+watch(textGeometry, () => {
   const revision = ++textGeometryRevision;
   void syncVisibleText(revision);
 });

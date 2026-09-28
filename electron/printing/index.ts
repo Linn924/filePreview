@@ -10,9 +10,12 @@ interface ActiveJob {
   reject: (e: Error) => void;
   window: BrowserWindow;
   timer: ReturnType<typeof setTimeout>;
+  submitting?: boolean;
 }
 const jobs = new Map<number, ActiveJob>();
 let queue = Promise.resolve();
+let worker: BrowserWindow | undefined;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
 export function setupPrinting(local: Session) {
   ipcMain.handle("print:drop",async(event,paths:unknown)=>{trusted(event);if(!Array.isArray(paths)||paths.some(p=>typeof p!=="string"||!path.isAbsolute(p)))throw Error("请只拖入本机文件。");
     const allowed=new Set(["pdf","png","jpg","jpeg","webp","gif","bmp","svg","docx"]);
@@ -88,7 +91,8 @@ export function setupPrinting(local: Session) {
             reject(Error("预览窗口已关闭。"));
             return;
           }
-          const win = new BrowserWindow({
+          clearTimeout(idleTimer);
+          const win = worker && !worker.isDestroyed() ? worker : new BrowserWindow({
             show: false,
             width: 1000,
             height: 800,
@@ -101,7 +105,15 @@ export function setupPrinting(local: Session) {
               backgroundThrottling: false,
             },
           });
-          protectWindow(win);
+          if (win !== worker) {
+            worker = win;
+            protectWindow(win);
+            const workerId = win.webContents.id;
+            win.on("closed", () => {
+              if (worker === win) worker = undefined;
+              if (jobs.has(workerId)) finish(workerId, Error("打印窗口已关闭。"));
+            });
+          }
           const id = win.webContents.id;
           const abort = () =>
             finish(id, Error("预览窗口已关闭，停止准备打印。"));
@@ -125,9 +137,6 @@ export function setupPrinting(local: Session) {
               reject(e);
             },
           });
-          win.on("closed", () => {
-            if (jobs.has(id)) finish(id, Error("打印窗口已关闭。"));
-          });
           void win
             .loadURL("preview://local/index.html?print=1")
             .catch((e) => finish(id, e));
@@ -149,6 +158,7 @@ export function setupPrinting(local: Session) {
     trusted(event);
     const entry = jobs.get(event.sender.id);
     if (!entry) return;
+    if (entry.submitting) return;
     if (error) {
       finish(event.sender.id, Error(error));
       return;
@@ -159,6 +169,7 @@ export function setupPrinting(local: Session) {
       finish(event.sender.id, Error("打印设置已释放。"));
       return;
     }
+    entry.submitting = true;
     event.sender.print(
       {
         silent: true,
@@ -171,7 +182,8 @@ export function setupPrinting(local: Session) {
         printBackground: true,
         margins: { marginType: "none" },
       },
-      (success, reason) =>
+      (success, reason) => {
+        if (jobs.get(event.sender.id) !== entry) return;
         finish(
           event.sender.id,
           success
@@ -184,7 +196,8 @@ export function setupPrinting(local: Session) {
                     ? `当前打印机可能不支持 ${options.paper}，请改用 A4 或在驱动中启用 ${options.paper}。`
                     : `打印任务提交失败（${reason || "未知原因"}）。若纸张为 ${options.paper}，请确认打印机驱动已支持该尺寸。`,
               ),
-        ),
+        );
+      },
     );
   });
 }
@@ -196,6 +209,17 @@ function finish(id: number, error?: Error) {
   jobs.delete(id);
   preparedOptions.delete(id);
   clearTimeout(entry.timer);
-  if (!entry.window.isDestroyed()) entry.window.destroy();
+  if (error) {
+    if (worker === entry.window) worker = undefined;
+    if (!entry.window.isDestroyed()) entry.window.destroy();
+  } else {
+    // Reload the same hidden window for the next file; release it after batch idle.
+    idleTimer = setTimeout(() => {
+      if (worker === entry.window && !jobs.has(id)) {
+        worker = undefined;
+        if (!entry.window.isDestroyed()) entry.window.destroy();
+      }
+    }, 1500);
+  }
   error ? entry.reject(error) : entry.resolve();
 }

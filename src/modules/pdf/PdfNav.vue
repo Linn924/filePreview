@@ -8,6 +8,7 @@ import {
   watch,
 } from "vue";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import { pdfWork } from "./workQueue";
 
 const props = defineProps<{
   pdf: PDFDocumentProxy | undefined;
@@ -262,8 +263,9 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
   if (running) return running;
   const generation=thumbGeneration;
   let task:RenderTask|undefined;
-  const job = (async () => {
+  const job = pdfWork(4, async () => {
     try {
+      if (disposed || generation !== thumbGeneration || !node.isConnected) return;
       const pdfPage = await props.pdf!.getPage(pageNumber + 1);
       if (disposed || generation!==thumbGeneration) return;
       const base = pdfPage.getViewport({ scale: 1 });
@@ -307,7 +309,7 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
           requestAnimationFrame(()=>{if(!disposed) schedulePaint();});
       }
     }
-  })();
+  });
   paintJobs.set(pageNumber, job);
   return job;
 }

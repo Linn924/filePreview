@@ -1,77 +1,71 @@
-import {
-  getDocument,
-  GlobalWorkerOptions,
-  type PDFDocumentLoadingTask,
-  type PDFDocumentProxy,
-} from "pdfjs-dist";
+import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-
-/**
- * Reuse PDFDocumentProxy across tab remounts and print paper sketches.
- * Avoids re-parsing the same invoice PDF on every switch (batch preview).
- */
 type Entry = {
-  doc: PDFDocumentProxy;
   task: PDFDocumentLoadingTask;
+  promise: Promise<PDFDocumentProxy>;
+  doc?: PDFDocumentProxy;
   bytes: number;
+  users: number;
+  retired: boolean;
 };
 const cache = new Map<string, Entry>();
 const BUDGET_BYTES = 384 * 1024 * 1024;
+const MAX_DOCUMENTS = 8;
 let cacheBytes = 0;
-
-function touch(id: string, entry: Entry) {
-  cache.delete(id);
-  cache.set(id, entry);
-  cacheBytes += entry.bytes;
-  while (cacheBytes > BUDGET_BYTES && cache.size > 1) {
-    const oldest = cache.keys().next().value as string | undefined;
-    if (!oldest || oldest === id) break;
-    releaseDoc(oldest);
+function destroy(entry: Entry) { void entry.task.destroy().catch(() => {}); }
+function evict() {
+  for (const [id, entry] of cache) {
+    if (cacheBytes <= BUDGET_BYTES && cache.size <= MAX_DOCUMENTS) break;
+    if (entry.users) continue;
+    cache.delete(id);
+    cacheBytes -= entry.bytes;
+    destroy(entry);
   }
 }
-
+/** Retire on file close; active readers keep their lease until unmount. */
 export function releaseDoc(id: string) {
   const entry = cache.get(id);
   if (!entry) return;
-  cacheBytes -= entry.bytes;
   cache.delete(id);
-  void entry.task.destroy().catch(() => {});
+  cacheBytes -= entry.bytes;
+  entry.retired = true;
+  if (!entry.users) destroy(entry);
 }
-
-export async function openCachedPdf(
+export async function acquireCachedPdf(
   id: string,
   bytes: Uint8Array,
-  extra: {
-    cMapUrl?: string;
-    cMapPacked?: boolean;
-    standardFontDataUrl?: string;
-    wasmUrl?: string;
-  } = {},
-): Promise<PDFDocumentProxy> {
+  extra: { cMapUrl?: string; cMapPacked?: boolean; standardFontDataUrl?: string; wasmUrl?: string; password?: string } = {},
+) {
   GlobalWorkerOptions.workerSrc = workerUrl;
-  const hit = cache.get(id);
-  if (hit) {
-    touch(id, hit);
-    return hit.doc;
+  let entry = cache.get(id);
+  if (entry) {
+    cache.delete(id);
+    cache.set(id, entry);
+  } else {
+    const task = getDocument({ data: bytes.slice(), ...extra, useSystemFonts: true });
+    entry = { task, promise: task.promise, bytes: bytes.byteLength, users: 0, retired: false };
+    cache.set(id, entry);
+    cacheBytes += entry.bytes;
   }
-  const task = getDocument({
-    data: bytes.slice(),
-    cMapUrl: extra.cMapUrl,
-    cMapPacked: extra.cMapPacked,
-    standardFontDataUrl: extra.standardFontDataUrl,
-    wasmUrl: extra.wasmUrl,
-    useSystemFonts: true,
-  } as never);
-  const doc = await task.promise;
-  const entry: Entry = {
-    doc,
-    task,
-    bytes: bytes.byteLength,
+  const held = entry;
+  held.users++;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    held.users--;
+    if (held.retired && !held.users) destroy(held);
+    evict();
   };
-  touch(id, entry);
-  return doc;
+  try {
+    const doc = await held.promise;
+    held.doc = doc;
+    evict();
+    return { doc, release };
+  } catch (error) {
+    if (cache.get(id) === held) releaseDoc(id);
+    release();
+    throw error;
+  }
 }
-
-export function cachedPdf(id: string) {
-  return cache.get(id)?.doc;
-}
+export function cachedPdf(id: string) { return cache.get(id)?.doc; }

@@ -1,5 +1,6 @@
-import { ref, shallowRef, type Ref } from "vue";
+import { ref, shallowRef, watch, onScopeDispose, getCurrentScope, type Ref } from "vue";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { pageTextContent } from "./textCache";
 
 export interface SearchHit {
   /** 1-based page */
@@ -30,8 +31,8 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     }
     const doc = pdf.value;
     if (!doc) return "";
-    const page = await doc.getPage(n);
-    const content = await page.getTextContent();
+    const content = await pageTextContent(doc, n, 3);
+    if (pdf.value !== doc) return "";
     const parts = content.items
       .map((item) => ("str" in item ? item.str : ""))
       .filter(Boolean);
@@ -48,12 +49,15 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     active.value = -1;
     const rev = ++searchRevision;
     const q = value.trim();
-    if (!q || !pdf.value) return;
+    searching.value = false;
+    const doc = pdf.value;
+    if (!q || !doc) return;
     searching.value = true;
     try {
       const found: SearchHit[] = [];
       const needle = q.toLowerCase();
-      for (let n = 1; n <= pdf.value.numPages; n++) {
+      let lastPublish = performance.now();
+      for (let n = 1; n <= doc.numPages; n++) {
         if (rev !== searchRevision) return;
         const text = await pageText(n);
         if (rev !== searchRevision) return;
@@ -69,11 +73,15 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
           });
           at = hay.indexOf(needle, at + Math.max(1, needle.length));
         }
-        if(found.length!==hits.value.length){
+        if(found.length!==hits.value.length &&
+          (active.value === -1 || performance.now() - lastPublish >= 100 || n === doc.numPages)){
           hits.value=[...found];
+          lastPublish = performance.now();
           if(active.value===-1)active.value=0;
         }
+        if (n % 8 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
+      if (rev === searchRevision) hits.value = [...found];
     } catch (e) {
       if (rev === searchRevision)
         error.value = e instanceof Error ? e.message : String(e);
@@ -92,11 +100,15 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
       (active.value - 1 + hits.value.length) % hits.value.length;
   }
   function clear() {
+    searchRevision++;
+    searching.value = false;
     query.value = "";
     hits.value = [];
     active.value = -1;
     error.value = "";
   }
+  watch(pdf, () => { clear(); cache.clear(); });
+  if (getCurrentScope()) onScopeDispose(() => { clear(); cache.clear(); });
   return {
     query,
     searching,

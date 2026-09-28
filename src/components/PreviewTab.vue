@@ -95,6 +95,7 @@ onBeforeUnmount(()=>{
  saveViewState();
  content.value=undefined;
  cacheDrop(props.file.id);
+ void module.value?.closeFile?.(props.file.id);
 });
 const module = computed(
   () => getPreviewModule(props.file.ext) as PreviewModule | undefined,

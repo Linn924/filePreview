@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch, toRaw } from "vue";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { acquireCachedPdf } from "../docCache";
+import { pdfWork } from "../workQueue";
 import type { PreviewFile } from "../../../../shared/contracts";
 import {
   paperSize,
@@ -19,7 +19,7 @@ const error = ref("");
 const showAll = ref(false);
 const MAX_SCAN = 40;
 let disposed = false;
-let loading: ReturnType<typeof getDocument> | undefined;
+let releaseLease: (() => void) | undefined;
 
 const activePages = computed(() => {
   try {
@@ -40,17 +40,17 @@ async function load() {
   error.value = "";
   pages.value = [];
   try {
-    GlobalWorkerOptions.workerSrc = workerUrl;
-    void loading?.destroy();
     const source=await window.localPreview.loadPreview(toRaw(props.file));
     if(disposed||source.error)return;
-    loading = getDocument({ data: source.bytes.slice() });
-    const pdf = await loading.promise;
-    if (disposed) return;
+    const lease = await acquireCachedPdf(props.file.id, source.bytes);
+    if (disposed) { lease.release(); return; }
+    releaseLease = lease.release;
+    const pdf = lease.doc;
     const n = Math.min(pdf.numPages, MAX_SCAN);
     for (let i = 1; i <= n; i++) {
       if (disposed) return;
-      const page = await pdf.getPage(i);
+      const page = await pdfWork(3, () => pdf.getPage(i));
+      if (disposed) return;
       const v = page.getViewport({ scale: 1 });
       pages.value.push({
         n: i,
@@ -73,7 +73,7 @@ watch(
 );
 onBeforeUnmount(() => {
   disposed = true;
-  void loading?.destroy();
+  releaseLease?.();
 });
 </script>
 <template>

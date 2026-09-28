@@ -110,6 +110,7 @@ async function printPdf(job: Awaited<ReturnType<typeof window.localPreview.consu
   style.textContent = sheetStyle(paper) + `.print-sheet canvas{max-width:100%;max-height:100%;object-fit:contain}`;
   host.value!.append(style);
   let pixels = 0;
+  const plans: Array<{ index: number; fit: number; width: number; height: number }> = [];
   for (const index of selected) {
     if (disposed) return;
     const page = await pdf.getPage(index);
@@ -119,14 +120,21 @@ async function printPdf(job: Awaited<ReturnType<typeof window.localPreview.consu
     pixels += Math.ceil(viewport.width) * Math.ceil(viewport.height);
     if (pixels > 60000000)
       throw Error("本次打印页数较多，请填写页码范围分批打印。");
+    plans.push({ index, fit, width: original.width, height: original.height });
+  }
+  // Validate the whole job's raster budget before allocating any print canvases.
+  for (const plan of plans) {
+    if (disposed) return;
+    const page = await pdf.getPage(plan.index);
+    const viewport = page.getViewport({ scale: (plan.fit * 150) / 72 });
     const section = document.createElement("section");
     section.className = "print-sheet";
-    section.dataset.sourcePage = String(index);
+    section.dataset.sourcePage = String(plan.index);
     const canvas = document.createElement("canvas");
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
-    canvas.style.width = (original.width * fit * 25.4) / 72 + "mm";
-    canvas.style.height = (original.height * fit * 25.4) / 72 + "mm";
+    canvas.style.width = (plan.width * plan.fit * 25.4) / 72 + "mm";
+    canvas.style.height = (plan.height * plan.fit * 25.4) / 72 + "mm";
     section.append(canvas);
     host.value!.append(section);
     task = page.render({ canvas, viewport });

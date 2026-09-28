@@ -2,7 +2,8 @@ import { fitScale } from "../../composables/fit";
 import { previewError } from "../../../shared/previewError";
 import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 import { previewPixelRatio } from "./bitmap";
-import { openCachedPdf, releaseDoc } from "./docCache";
+import { acquireCachedPdf } from "./docCache";
+import { pdfWork } from "./workQueue";
 import {
   onMounted,
   onBeforeUnmount,
@@ -13,9 +14,7 @@ import {
   nextTick,
 } from "vue";
 import {
-  getDocument,
   GlobalWorkerOptions,
-  type PDFDocumentLoadingTask,
   type PDFDocumentProxy,
   type RenderTask,
 } from "pdfjs-dist";
@@ -36,8 +35,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   const current = ref(1);
   let pdf: PDFDocumentProxy | undefined,
     observer: IntersectionObserver | undefined,
-    resize: ResizeObserver | undefined,
-    load: PDFDocumentLoadingTask | undefined;
+    resize: ResizeObserver | undefined;
   const pdfRef = shallowRef<PDFDocumentProxy | undefined>();
   const needPassword = ref(false);
   const allowPrint = ref(true);
@@ -46,6 +44,12 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   let disposed = false,
     revision = 0;
   let queue = Promise.resolve();
+  let releaseLease: (() => void) | undefined;
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let refreshing = false;
+  let refreshAgain = false;
+  let scanningSizes = false;
+  let scrollFrame = 0;
   const rendered = new Map<number, HTMLCanvasElement>();
   const tasks = new Map<number, {task:RenderTask;canvas:HTMLCanvasElement}>();
   const pending = new Set<number>();
@@ -134,7 +138,11 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     current.value = indexAtOffset(y + Math.min(100, h * 0.2)) + 1;
   }
   function sync() {
-    updateVirtualWindow();
+    if (scrollFrame) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = 0;
+      if (!disposed) updateVirtualWindow();
+    });
   }
   function jump(value: number) {
     const n = pages.value.length;
@@ -198,7 +206,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     pending.add(index);
     const token = revision;
     queue = queue
-      .then(async () => {
+      .then(() => pdfWork(0, async () => {
         if (disposed || token !== revision || !pdf || !inRenderRange(index))
           return;
         const canvas = pageEl(index)?.querySelector("canvas");
@@ -242,7 +250,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
             releaseCanvas(canvas);
           if (tasks.get(index)?.task === task) tasks.delete(index);
         }
-      })
+      }))
       .catch((e) => {
         if (!disposed && e?.name !== "RenderingCancelledException") {
           failed.add(index);
@@ -272,6 +280,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     }
     observer = new IntersectionObserver(
       (entries) => {
+        entries.sort((a,b)=>Math.abs(Number((a.target as HTMLElement).dataset.page)+1-current.value)-Math.abs(Number((b.target as HTMLElement).dataset.page)+1-current.value));
         for (const e of entries) {
           const i = Number((e.target as HTMLElement).dataset.page);
           if (e.isIntersecting) void render(i);
@@ -295,19 +304,34 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   }
 
   async function refresh() {
-    layout.value++;
-    textGeometry.value++;
-    revision++;
-    failed.clear();
-    retries.clear();
-    tasks.forEach(({task}) => task.cancel());
-    await queue;
     if (disposed) return;
-    for (const canvas of rendered.values()) releaseCanvas(canvas);
-    rendered.clear();
-    await nextTick();
-    updateVirtualWindow();
-    observe();
+    if (refreshing) { refreshAgain = true; return; }
+    refreshing = true;
+    try {
+      layout.value++;
+      textGeometry.value++;
+      revision++;
+      failed.clear();
+      retries.clear();
+      tasks.forEach(({task}) => task.cancel());
+      await queue;
+      if (disposed) return;
+      for (const canvas of rendered.values()) releaseCanvas(canvas);
+      rendered.clear();
+      await nextTick();
+      updateVirtualWindow();
+      observe();
+    } finally {
+      refreshing = false;
+      if (refreshAgain) { refreshAgain = false; scheduleRefresh(); }
+    }
+  }
+
+  function scheduleRefresh() {
+    if (disposed) return;
+    clearTimeout(refreshTimer);
+    // Keep existing pixels during continuous resize/zoom, redraw after settling.
+    refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh(); }, 100);
   }
 
   function setRotate(value: 0 | 90 | 180 | 270) {
@@ -321,15 +345,18 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     needPassword.value = false;
     passwordError.value = "";
     try {
-      void load?.destroy();
-      const doc = await openCachedPdf(props.file.id, props.file.bytes.slice(), {
+      const lease = await acquireCachedPdf(props.file.id, props.file.bytes, {
         cMapUrl: base + "cmaps/",
         cMapPacked: true,
         standardFontDataUrl: base + "standard_fonts/",
         wasmUrl: base + "wasm/",
+        password,
       });
+      if (disposed) { lease.release(); return; }
+      releaseLease?.();
+      releaseLease = lease.release;
+      const doc = lease.doc;
       pdf = doc;
-      load = undefined;
       pdfRef.value = doc;
       try {
         const perms = (await doc.getPermissions()) as number | null;
@@ -355,22 +382,31 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       if (disposed) return;
       observe();
       if (!resize && scroll.value) {
-        resize = createSafeResizeObserver(() => void refresh());
+        resize = createSafeResizeObserver(scheduleRefresh);
         resize.observe(scroll.value);
       }
       emit("ready");
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (scanningSizes) return;
+      scanningSizes = true;
       let sizes: Array<{ index: number; width: number; height: number }> = [];
-      for (let n = 2; n <= doc.numPages; n++) {
+      const remaining = new Set(Array.from({length: Math.max(0, doc.numPages - 1)}, (_, i) => i + 2));
+      let scanCursor = 2;
+      while (remaining.size) {
         if (disposed) return;
-        const p = await doc.getPage(n);
+        // Resolve sizes nearest the reading position first, yield to foreground work.
+        const near = current.value;
+        while (scanCursor <= doc.numPages && !remaining.has(scanCursor)) scanCursor++;
+        const n = [near, near + 1, near - 1, near + 2].find(page => remaining.has(page)) ?? scanCursor;
+        remaining.delete(n);
+        const p = await pdfWork(3, () => doc.getPage(n));
         if (disposed) return;
         const v = p.getViewport({ scale: 1 });
         sizes.push({ index: n - 1, width: v.width, height: v.height });
-        if (sizes.length === 16 || n === pdf.numPages) {
+        if (sizes.length === 64 || !remaining.size || (n >= current.value && n <= current.value + 2)) {
           await updateSizes(sizes);
           sizes = [];
-          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          await new Promise<void>((resolve) => setTimeout(resolve, 8));
         }
       }
       updateVirtualWindow();
@@ -401,7 +437,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   onMounted(() => void bootstrap());
   watch(
     () => props.zoom,
-    () => void refresh(),
+    scheduleRefresh,
   );
   watch(
     () => props.fitMode,
@@ -414,13 +450,15 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   );
   onBeforeUnmount(() => {
     disposed = true;
+    clearTimeout(refreshTimer);
+    cancelAnimationFrame(scrollFrame);
     revision++;
     observer?.disconnect();
     resize?.disconnect();
     tasks.forEach(({task}) => task.cancel());
     for (const canvas of rendered.values()) releaseCanvas(canvas);
     rendered.clear();
-    load?.destroy?.();
+    releaseLease?.();
   });
   return {
     scroll,
