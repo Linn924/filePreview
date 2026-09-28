@@ -1,5 +1,34 @@
 # 测试执行说明
 
+## PDF 全链路统一验收（2026-09-28）
+
+方案及边界见 [PDF-OPTIMIZATION.md](PDF-OPTIMIZATION.md)。仅构建测试所需前端/主进程文件，不生成安装包、ZIP，不安装，不连实体打印机。
+
+```powershell
+npm run typecheck
+npm test -- --suite pdf,pdfchain,printing,core,zoom
+# 共享读取、缓存和关闭策略变化时：
+npm test -- --skip-build --suite word,excel,ppt,text,image,bulk
+# 性能不包含在 all；先保留同机旧版数据，再复测当前源码：
+$env:FILE_PREVIEW_PERF_PHASE='after'
+npm test -- --skip-build --suite pdfperf
+$env:FILE_PREVIEW_PERF_SCENARIO='print-10'
+npm test -- --skip-build --suite pdfperf
+Remove-Item Env:FILE_PREVIEW_PERF_SCENARIO
+Remove-Item Env:FILE_PREVIEW_PERF_PHASE
+```
+
+- `pdfchain`：空 PDF 构造失败后预算不残留；真实 R2 加密样例错误密码→正确密码、允许/禁止打印的权限到达工具栏；50 标签仅加载一个模块；400% 下总位图额度；六窗口共享额度与关闭恢复；全部关闭后路径/预算客户为零。
+- `optimization.ts`：可控 task 检查 loading Promise 去重、worker 复用、计费/引用保护/淘汰、密码加载替换与旧失败不删新缓存；取消排队任务不执行；1000 页前缀位置经 100 次混合更新仍正确。此测试不替代真实 PDF 解析。
+- `searchMemory.ts`：120 页 2400 命中、32 页缓存；提取中清空、恢复和换词；原始重复空格及 Unicode 大小写展开仍映射原偏移。PDF 界面检查显式清除高亮及旋转后长文字框方向。
+- `printing`：截断真正打印出口、在内存生成 PDF，检查 A5 纵向/A4 横向尺寸、份数与源页隔离，实际大小仍为 150/72 渲染比例并按纸张裁剪；重复与旧 token 不导致重提交，失败/超预算不提交，闲置窗口释放；解锁状态支持示意与输出；图片/DOCX 共享打印协议仍可提交。
+- `unit`：同 ID 的真实文件读取共享结果，backing buffer 不含池化 padding；不同窗口引用只在最后一次释放时关闭；读取中关闭不回填；超大原始页面只栅格化可打印裁剪区域。
+- `pdfperf`：自生成 50 单页发票、500 页混合尺寸、12 页扫描图、20 页密集文字（20000 命中）、6 独立窗口、10 文件打印。每 50 ms 采样本测试 Electron 主/渲染/GPU/工具进程工作集之和，记录开窗单次、切换中位数、搜索及打印准备中位数；缩放耗时包含固定 250 ms 观察等待。测量不是精确显存/瞬时峰值，也不是大样本统计。
+
+性能测试对创建的 WebContents 单独禁用后台节流，避免聊天窗口遮挡时暂停动画帧；此设置不进入产品。旧版与新版应使用同一性能脚本和前后台策略；打印 10 份的完成等待为 60 秒，单份准备仍依照现有主进程超时，不能把默认 16 秒界面断言等待当成批量性能门槛。结果在 `outputs/bench/pdf-chain-before.json` / `pdf-chain-after.json`；门槛仍为耗时不超过旧值 × 1.3 + 100 ms、工作集不超过旧值 × 1.25 + 64 MB。失败/遮挡导致未完成的运行不参与通过比较。
+
+既有 suite 的截图、样例和结果均在忽略目录中，不提交测试样例、截图或构建文件。打印驱动、纸盒、实际出纸、所有字体/语言/扫描件形态并非此自动化的覆盖承诺。
+
 ## 2026-09-28 PDF 优化：已校验（未打包）
 
 本轮复测实际执行：`npm run typecheck`、`npm test -- --suite pdf,printing,core`、`npm test -- --skip-build --suite pdf,printing,zoom`、`npm test -- --skip-build --suite printing`，最终均通过。最后的 printing 复测新增 A5 纵向 / A4 横向物理尺寸隔离及 80 页打印预算拒绝断言。没有生成安装包、安装软件或提交实体打印。

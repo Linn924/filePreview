@@ -36,3 +36,7 @@ const fresh = cancel.run('missing');
 await Promise.all([stale,fresh]);
 assert.deepEqual(cancel.hits.value,[],'old query cannot overwrite replacement');
 console.log('PASS PDF search cancellation: clear, restart and concurrent query replacement');
+const mapping = usePdfSearch(shallowRef({numPages:1,getPage:async()=>({getTextContent:async()=>({items:[{str:'  A  B'},{str:'İ test'}]})})} as unknown as PDFDocumentProxy));
+await mapping.run('B');assert.equal(mapping.hits.value[0].charOffset,5,'whitespace offsets must match text spans');
+await mapping.run('İ');assert.equal(mapping.hits.value[0].charOffset,7);assert.equal(mapping.hits.value[0].length,1,'Unicode folding must map back to source length');
+console.log('PASS PDF exact source whitespace and Unicode search offsets');

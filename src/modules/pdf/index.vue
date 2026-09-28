@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, inject, ref, watch } from "vue";
 import type { PreviewProps } from "../types";
 import { usePreview } from "./usePreview";
 import { usePdfSearch, type SearchHit } from "./useSearch";
@@ -10,6 +10,7 @@ import {usePan} from './usePan';
 import {useAnnotations} from './useAnnotations';
 import PdfNotes from './PdfNotes.vue';
 import { pageTextContent } from './textCache';
+import { Util } from 'pdfjs-dist';
 const props = defineProps<PreviewProps>();
 const emit = defineEmits<{
   ready: [];
@@ -35,9 +36,10 @@ const {
   textGeometry,
   setRotate,
   allowPrint,
-} = usePreview(props, emit);
+} = usePreview(props, emit,(allowed,password)=>publishPrintPermission?.(allowed,password));
 const search = usePdfSearch(pdf);
-provide("pdfAllowPrint", allowPrint);
+const publishPrintPermission=inject<(allowed:boolean,password?:string)=>void>('pdf:set-print-permission');
+watch(allowPrint,value=>publishPrintPermission?.(value),{immediate:true});
 const searchOpen = ref(false);
 watch(searchOpen, open => { if (!open) search.clear(); });
 const navOpen = ref(false);
@@ -51,6 +53,12 @@ function addMark(kind:'highlight'|'note'){
  if(kind==='note')notesOpen.value=true;
 }
 let textGeometryRevision = 0;
+let textController=new AbortController();
+let textFrame=0;
+let textDisposed=false;
+const measureCanvas=document.createElement('canvas');measureCanvas.width=1;measureCanvas.height=1;
+const measureText=measureCanvas.getContext('2d');
+let measuringFont='';
 function cycleRotate() {
   const next = (((rotate.value + 90) % 360) as 0 | 90 | 180 | 270);
   setRotate(next);
@@ -72,9 +80,10 @@ watch(
     if (hit) {
       jump(hit.page);
       highlightActiveHit();
-    }
+    } else clearHitMarks();
   },
 );
+watch(search.hits,()=>{if(!search.hits.value.length)clearHitMarks();else highlightActiveHit();});
 async function runSearch() {
   await search.run();
 }
@@ -113,10 +122,15 @@ function markHitsInLayer(layer: HTMLElement, hit: SearchHit | undefined) {
   }
 }
 
+function clearHitMarks() {
+  scroll.value?.querySelectorAll('.pdf-hit').forEach(mark=>mark.replaceWith(document.createTextNode(mark.textContent||'')));
+  scroll.value?.querySelectorAll('.pdf-page.is-active-hit').forEach(page=>page.classList.remove('is-active-hit'));
+}
 function highlightActiveHit() {
   const hit = activeHit.value;
   if (!hit) return;
   void nextTick().then(() => {
+    if(textDisposed||activeHit.value!==hit)return;
     scroll.value
       ?.querySelectorAll(".pdf-page.is-active-hit")
       .forEach((el) => el.classList.remove("is-active-hit"));
@@ -177,9 +191,9 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
   annotHost.replaceChildren();
   try {
     const page = await doc.getPage(index + 1);
-    if (!layer.isConnected || layer.dataset.loading !== revision) return;
-    const content = await pageTextContent(doc, index + 1);
-    if (!layer.isConnected || layer.dataset.loading !== revision) return;
+    if (!layer.isConnected || layer.dataset.loading !== revision || revision!==String(textGeometryRevision)) return;
+    const content = await pageTextContent(doc, index + 1,1,textController.signal);
+    if (!layer.isConnected || layer.dataset.loading !== revision || revision!==String(textGeometryRevision)) return;
     const cssW = pageEl.clientWidth || parseFloat(pageEl.style.width) || 1;
     const rotation = (page.rotate + rotate.value) % 360;
     const base = page.getViewport({ scale: 1, rotation });
@@ -190,21 +204,39 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
       transform: number[];
       width?: number;
       height?: number;
+      fontName?:string;
     }>;
+    let fragment=document.createDocumentFragment();
+    let batch=0;
     for (const item of items) {
+      if(textDisposed||!layer.isConnected||layer.dataset.loading!==revision||revision!==String(textGeometryRevision))return;
       if (!item.str) continue;
-      const tx = item.transform;
-      const [x, y] = viewport.convertToViewportPoint(tx[4], tx[5]);
-      const fontH = Math.hypot(tx[2], tx[3]) * viewport.scale || 12;
+      const tx = Util.transform(viewport.transform,item.transform);
+      const fontH = Math.hypot(tx[2], tx[3]) || 12;
+      const font=content.styles[item.fontName||''];
+      const angle=Math.atan2(tx[1],tx[0])+(font?.vertical?Math.PI/2:0);
+      const ascent=fontH*(font?.ascent??(font?.descent!==undefined?1+font.descent:0.8));
       const span = document.createElement("span");
       span.textContent = item.str;
       const style = span.style;
-      style.left = x + "px";
-      style.top = y - fontH + "px";
+      style.left = tx[4]+ascent*Math.sin(angle) + "px";
+      style.top = tx[5]-ascent*Math.cos(angle) + "px";
       style.fontSize = fontH + "px";
-      if (item.width) style.width = item.width * viewport.scale + "px";
-      layer.append(span);
+      style.fontFamily=font?.fontFamily||'sans-serif';
+      style.lineHeight='1';style.height=fontH+'px';
+      const fontSignature=`${fontH}px ${style.fontFamily}`;
+      if(measureText&&fontSignature!==measuringFont){measureText.font=fontSignature;measuringFont=fontSignature;}
+      const measured=measureText?.measureText(item.str).width||1;
+      const advance=(font?.vertical?item.height:item.width)||measured/viewport.scale;
+      style.width=measured+'px';
+      style.transform=`rotate(${angle}rad) scaleX(${advance*viewport.scale/measured})`;
+      fragment.append(span);
+      if(++batch%200===0) {
+        layer.append(fragment);fragment=document.createDocumentFragment();
+        await new Promise<void>(resolve=>setTimeout(resolve,0));
+      }
     }
+    layer.append(fragment);
     layer.dataset.built = "1";
     layer.dataset.geometry = revision;
     delete layer.dataset.loading;
@@ -212,7 +244,7 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
     // Item 2: link annotations (GoTo / URI)
     try {
       const annotations = await page.getAnnotations();
-      if (!layer.isConnected || layer.dataset.geometry !== revision) return;
+      if (!layer.isConnected || layer.dataset.geometry !== revision || revision!==String(textGeometryRevision)) return;
       for (const ann of annotations) {
         if (!ann || !ann.rect) continue;
         const kind = (ann as { subtype?: string }).subtype || "";
@@ -277,19 +309,24 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
 // Always build text layers when visible pages change or PDF loads (item 1)
 async function syncVisibleText(revision: number) {
   await nextTick();
-  if (revision !== textGeometryRevision) return;
+  if (textDisposed || revision !== textGeometryRevision) return;
   const elements = Array.from(scroll.value?.querySelectorAll<HTMLElement>(".pdf-page") || []);
   elements.sort((a,b)=>Math.abs(Number(a.dataset.page)+1-current.value)-Math.abs(Number(b.dataset.page)+1-current.value));
   for (const el of elements) {
-    if (revision !== textGeometryRevision) return;
+    if (textDisposed || revision !== textGeometryRevision) return;
     await buildTextLayer(el, Number(el.dataset.page));
   }
   if (revision === textGeometryRevision) highlightActiveHit();
 }
-watch([visiblePages, pdf], () => void syncVisibleText(textGeometryRevision));
+function scheduleText() {
+  if(textFrame||textDisposed)return;
+  textFrame=requestAnimationFrame(()=>{textFrame=0;void syncVisibleText(textGeometryRevision);});
+}
+watch([visiblePages, pdf], scheduleText);
 watch(textGeometry, () => {
-  const revision = ++textGeometryRevision;
-  void syncVisibleText(revision);
+  textController.abort();textController=new AbortController();
+  textGeometryRevision++;
+  scheduleText();
 });
 // Keyboard: PageDown / PageUp to jump pages (item 9 — keep)
 function onKeydown(event: KeyboardEvent) {
@@ -309,6 +346,8 @@ onMounted(() => {
   window.addEventListener("pdf:open-search", handleOpenSearch);
 });
 onBeforeUnmount(() => {
+  textDisposed=true;textGeometryRevision++;textController.abort();cancelAnimationFrame(textFrame);
+  measureCanvas.width=0;measureCanvas.height=0;
   window.removeEventListener("pdf:open-search", handleOpenSearch);
 });
 </script>
@@ -323,7 +362,7 @@ onBeforeUnmount(() => {
           :target="`[data-file-id='${props.file.id}'] .search-tools`"
           v-model:open="searchOpen"
           :query="search.query.value"
-          :hits="search.hits.value"
+          :count="search.count.value"
           :active="search.active.value"
           :searching="search.searching.value"
           :error="search.error.value"

@@ -10,12 +10,14 @@ import {
   paperSize,
   selectedPages,
   applyPageOrder,
-  printScaleFactor,
 } from "../../../../shared/printing";
+import { pdfRasterPlan } from './rasterPlan';
 const host = ref<HTMLElement>();
 let disposed = false;
 let task: RenderTask | undefined;
 let loading: ReturnType<typeof getDocument> | undefined;
+let jobToken: string | undefined;
+const canvases = new Set<HTMLCanvasElement>();
 
 function sheetStyle(paper: { width: number; height: number }) {
   return `@page{size:${paper.width}mm ${paper.height}mm;margin:0}html,body,#app{margin:0;padding:0;background:white;color:black;color-scheme:light}.print-sheet{box-sizing:border-box;width:${paper.width}mm;height:${paper.height}mm;padding:10mm;break-after:page;display:flex;align-items:center;justify-content:center;overflow:hidden}.print-sheet:last-child{break-after:auto}.print-sheet canvas,.print-sheet img,.print-sheet .word-host{max-width:100%;max-height:100%;object-fit:contain}`;
@@ -55,7 +57,7 @@ async function printImage(job: Awaited<ReturnType<typeof window.localPreview.con
   await new Promise<void>((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
-  if (!disposed) await window.localPreview.printReady();
+  if (!disposed) await window.localPreview.printReady(undefined,jobToken);
 }
 
 async function printWord(job: Awaited<ReturnType<typeof window.localPreview.consumePrint>>) {
@@ -87,14 +89,16 @@ async function printWord(job: Awaited<ReturnType<typeof window.localPreview.cons
   await new Promise<void>((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
-  if (!disposed) await window.localPreview.printReady();
+  if (!disposed) await window.localPreview.printReady(undefined,jobToken);
 }
 
 async function printPdf(job: Awaited<ReturnType<typeof window.localPreview.consumePrint>>) {
   GlobalWorkerOptions.workerSrc = workerUrl;
   const base = new URL("./pdf-assets/", location.href).href;
   loading = getDocument({
-    data: job.file.bytes.slice(),
+    // This hidden renderer exclusively owns the consumed job; transfer it directly.
+    data: job.file.bytes,
+    password: job.file.view?.pdfPassword,
     cMapUrl: base + "cmaps/",
     cMapPacked: true,
     standardFontDataUrl: base + "standard_fonts/",
@@ -102,55 +106,59 @@ async function printPdf(job: Awaited<ReturnType<typeof window.localPreview.consu
     useSystemFonts: true,
   });
   const pdf = await loading.promise;
+  const permissions=await pdf.getPermissions();
+  if(permissions&&!permissions.has(4))throw Error('此 PDF 不允许打印。');
   const ranged = selectedPages(job.options.range, pdf.numPages);
   const selected = applyPageOrder(ranged, job.options.pageOrder || "forward");
   if (!selected.length) throw Error("按当前页码范围与页序没有可打印的页。");
   const paper = paperSize(job.options);
   const style = document.createElement("style");
-  style.textContent = sheetStyle(paper) + `.print-sheet canvas{max-width:100%;max-height:100%;object-fit:contain}`;
+  style.textContent = sheetStyle(paper) + `.print-sheet canvas{flex:none;max-width:none;max-height:none}`;
   host.value!.append(style);
   let pixels = 0;
-  const plans: Array<{ index: number; fit: number; width: number; height: number }> = [];
+  const plans: Array<{ index: number; raster:ReturnType<typeof pdfRasterPlan> }> = [];
   for (const index of selected) {
     if (disposed) return;
     const page = await pdf.getPage(index);
     const original = page.getViewport({ scale: 1 });
-    const fit = printScaleFactor(original, paper, job.options.scale || "fit");
-    const viewport = page.getViewport({ scale: (fit * 150) / 72 });
-    pixels += Math.ceil(viewport.width) * Math.ceil(viewport.height);
+    const raster=pdfRasterPlan(original,paper,job.options.scale||'fit',150);
+    pixels += raster.width*raster.height;
     if (pixels > 60000000)
       throw Error("本次打印页数较多，请填写页码范围分批打印。");
-    plans.push({ index, fit, width: original.width, height: original.height });
+    plans.push({ index, raster });
   }
   // Validate the whole job's raster budget before allocating any print canvases.
   for (const plan of plans) {
     if (disposed) return;
     const page = await pdf.getPage(plan.index);
-    const viewport = page.getViewport({ scale: (plan.fit * 150) / 72 });
+    const viewport = page.getViewport({ scale: plan.raster.scale });
     const section = document.createElement("section");
     section.className = "print-sheet";
     section.dataset.sourcePage = String(plan.index);
     const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    canvas.style.width = (plan.width * plan.fit * 25.4) / 72 + "mm";
-    canvas.style.height = (plan.height * plan.fit * 25.4) / 72 + "mm";
+    canvases.add(canvas);
+    canvas.width = plan.raster.width;
+    canvas.height = plan.raster.height;
+    canvas.style.width = plan.raster.widthMm + 'mm';
+    canvas.style.height = plan.raster.heightMm + 'mm';
+    canvas.dataset.renderScale=String(plan.raster.scale);
     section.append(canvas);
     host.value!.append(section);
-    task = page.render({ canvas, viewport });
+    task = page.render({ canvas, viewport, transform:plan.raster.transform, intent:'print' });
     await task.promise;
     page.cleanup();
   }
   await document.fonts.ready;
-  await new Promise<void>((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-  );
-  if (!disposed) await window.localPreview.printReady();
+  // Native print flushes layout; hidden-window animation frames may be throttled.
+  await new Promise<void>(resolve=>setTimeout(resolve,0));
+  if (!disposed) await window.localPreview.printReady(undefined,jobToken);
 }
 
 onMounted(async () => {
   try {
     const job = await window.localPreview.consumePrint();
+    jobToken=job.token;
+    if(host.value)host.value.dataset.jobToken=jobToken;
     if (job.file.ext === "pdf") await printPdf(job);
     else if (job.file.ext === "docx") await printWord(job);
     else await printImage(job);
@@ -158,6 +166,7 @@ onMounted(async () => {
     if (!disposed)
       await window.localPreview.printReady(
         e instanceof Error ? e.message : String(e),
+        jobToken,
       );
   }
 });
@@ -165,6 +174,7 @@ onBeforeUnmount(() => {
   disposed = true;
   task?.cancel();
   void loading?.destroy();
+  for(const canvas of canvases){canvas.width=0;canvas.height=0;}canvases.clear();
   host.value?.replaceChildren();
 });
 </script>

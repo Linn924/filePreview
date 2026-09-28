@@ -6,7 +6,7 @@ const props = defineProps<{ file: PreviewFile; disabled?: boolean }>();
 const error = ref("");
 const previewFiles = inject<ShallowRef<PreviewFile[]>>("previewFiles");
 const allowPrintRef = inject<Ref<boolean>>("pdfAllowPrint");
-const canPrint = computed(() => allowPrintRef?.value !== false);
+const canPrint = computed(() => props.file.view?.pdfPrintAllowed !== false && allowPrintRef?.value !== false);
 async function open() {
   try {
     const { printEntry } = await window.localPreview.getSettings();

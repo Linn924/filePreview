@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import {nextTick,ref,watch} from 'vue';
-import type { SearchHit } from "./useSearch";
 
 const props=defineProps<{
   target:string;
   query: string;
-  hits: SearchHit[];
+  count: number;
   active: number;
   searching: boolean;
   error: string;
@@ -73,13 +72,13 @@ function submit(event: Event) {
       <span class="pdf-search-count" aria-live="polite">
         <template v-if="searching">搜索中…</template>
         <template v-else-if="query.trim()">
-          {{ hits.length ? active + 1 + " / " + hits.length : "无结果" }}
+          {{ count ? active + 1 + " / " + count : "无结果" }}
         </template>
       </span>
       <button
         type="button"
         class="icon-only-btn"
-        :disabled="searching || !hits.length"
+        :disabled="searching || !count"
         title="上一处"
         aria-label="上一处"
         @click="emit('prev')"
@@ -92,7 +91,7 @@ function submit(event: Event) {
       <button
         type="button"
         class="icon-only-btn"
-        :disabled="searching || !hits.length"
+        :disabled="searching || !count"
         title="下一处"
         aria-label="下一处"
         @click="emit('next')"

@@ -5,6 +5,33 @@ import { randomUUID } from "node:crypto";
 import { extensions, type PreviewFile } from "../shared/contracts";
 
 const selectedPaths = new Map<string, string>();
+const reads = new Map<string, Promise<PreviewFile>>();
+const readControllers = new Map<string,AbortController>();
+const references = new Map<string, Set<number>>();
+const passwords=new Map<string,string>();
+export function rememberPdfPassword(owner:number,id:string,password:string) {
+  if(!references.get(id)?.has(owner)||typeof password!=='string'||password.length>2048)throw Error('文件已关闭，无法保存本次解锁状态。');
+  passwords.set(id,password);
+}
+function sessionFile(file:PreviewFile):PreviewFile {
+  const password=passwords.get(file.id);
+  return password?{...file,view:{zoom:100,scroll:[],...file.view,pdfPassword:password}}:file;
+}
+export function retainPreparedFiles(owner:number,files:PreviewFile[]) {
+  for(const file of files) {
+    if(!selectedPaths.has(file.id))continue;
+    let users=references.get(file.id);if(!users){users=new Set();references.set(file.id,users);}users.add(owner);
+  }
+}
+export function releasePreparedReference(owner:number,id:string) {
+  const users=references.get(id);if(!users)return;
+  users.delete(owner);if(!users.size){references.delete(id);releasePreparedFile(id);}
+}
+export function releasePreparedOwner(owner:number) { for(const id of references.keys())releasePreparedReference(owner,id); }
+export function discardUnownedFiles(files:PreviewFile[]) { for(const file of files)if(!references.has(file.id))releasePreparedFile(file.id); }
+export function transferPreparedReference(source:number,target:number,id:string) {
+  const users=references.get(id);if(users?.has(source))users.add(target);
+}
 
 /** 文本类扩展名，限制 5 MB；其余格式限制 100 MB。 */
 const TEXT_EXTS = new Set(["txt", "text", "json", "md", "log", "xml"]);
@@ -60,18 +87,26 @@ export async function preparePreviewFile(filePath: string): Promise<PreviewFile>
 
 /** 按需加载：标签挂载时读取字节。 */
 export async function loadPreparedFile(file: PreviewFile): Promise<PreviewFile> {
-  if (file.bytes?.byteLength || file.error) return file;
+  if (file.bytes?.byteLength || file.error) return sessionFile(file);
   const selected = selectedPaths.get(file.id);
   if (!selected) return { ...file, error: "文件已关闭，请重新选择。" };
-  const loaded = await readPreviewFile(selected);
-  return { ...loaded, id: file.id, view: file.view };
+  let pending = reads.get(file.id);
+  if (!pending) {
+    const controller=new AbortController();readControllers.set(file.id,controller);
+    pending = readPreviewFile(selected,controller.signal);
+    reads.set(file.id, pending);
+    void pending.finally(() => { if (reads.get(file.id) === pending) { reads.delete(file.id);readControllers.delete(file.id); } }).catch(() => {});
+  }
+  const loaded = await pending;
+  if (selectedPaths.get(file.id) !== selected) return { ...file, error: "文件已关闭，请重新选择。" };
+  return sessionFile({ ...loaded, id: file.id, view: file.view });
 }
 
-export function releasePreparedFile(id: string) { selectedPaths.delete(id); }
+export function releasePreparedFile(id: string) { selectedPaths.delete(id);passwords.delete(id);readControllers.get(id)?.abort(); }
 export function preparedFileCount() { return selectedPaths.size; }
 
 /** 直接读取文件的完整字节（供打印等场景使用）。 */
-export async function readPreviewFile(filePath: string): Promise<PreviewFile> {
+export async function readPreviewFile(filePath: string, signal?:AbortSignal): Promise<PreviewFile> {
   const file: PreviewFile = {
     id: randomUUID(),
     name: path.basename(filePath),
@@ -83,7 +118,10 @@ export async function readPreviewFile(filePath: string): Promise<PreviewFile> {
   const result = await openAndValidate(filePath, file);
   if (!result) return file;
   try {
-    file.bytes = new Uint8Array(await result.handle.readFile());
+    const buffer = await result.handle.readFile({signal});
+    // Keep a whole owned backing buffer; pooled/sliced Buffers need one tight copy.
+    file.bytes = buffer.byteOffset===0&&buffer.buffer.byteLength===buffer.byteLength
+      ? new Uint8Array(buffer.buffer) : new Uint8Array(buffer);
   } catch (e) {
     file.error = previewError(e, "文件");
   } finally {

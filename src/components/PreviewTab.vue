@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef, nextTick, watch, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, shallowRef, nextTick, watch, computed, provide, onMounted, onBeforeUnmount } from "vue";
 import { getPreviewModule } from "../modules";
 import FitControl from "./FitControl.vue";
 import type { FitMode } from "../composables/fit";
@@ -14,6 +14,14 @@ const props = defineProps<{
   /** Whether this tab is the active tab (for memory cache). */
   active?: boolean;
 }>();
+const printAllowed=ref(props.file.view?.pdfPrintAllowed!==false);
+provide('pdfAllowPrint',printAllowed);
+provide('pdf:set-print-permission',(allowed:boolean,password?:string)=>{
+  printAllowed.value=allowed;
+  props.file.view ??= {zoom:props.initialZoom,scroll:[]};
+  props.file.view.pdfPrintAllowed=allowed;
+  if(password)props.file.view.pdfPassword=password;
+});
 
 const content=shallowRef<PreviewFile>();
 let disposed=false;
@@ -42,6 +50,7 @@ async function ensureLoaded() {
   ready.value = false;
   const loaded = await window.localPreview.loadPreview(props.file);
   if (disposed) return;
+  if(loaded.view?.pdfPassword){props.file.view??={zoom:props.initialZoom,scroll:[]};props.file.view.pdfPassword=loaded.view.pdfPassword;}
   loaded.view = props.file.view;
   cachePut(props.file.id, loaded);
   content.value = loaded;
@@ -72,6 +81,7 @@ function scheduleUnload() {
 }
 
 onMounted(() => {
+  if (!props.active) return;
   void enqueueLoad(async () => {
     await ensureLoaded();
     if (!props.active) scheduleUnload();
@@ -84,6 +94,7 @@ watch(
       clearTimeout(idleTimer);
       void enqueueLoad(() => ensureLoaded());
     } else {
+      if (!content.value) return;
       saveViewState();
       scheduleUnload();
     }
@@ -214,7 +225,7 @@ async function loaded() {
       <p>{{ error }}</p>
     </div>
     <template v-else
-      ><div v-if="!ready" class="loading" role="status">正在解析文件…</div>
+      ><div v-if="active && !ready" class="loading" role="status">正在解析文件…</div>
       <component
         v-if="content && !content.error"
         :is="getPreviewModule(file.ext)?.component"

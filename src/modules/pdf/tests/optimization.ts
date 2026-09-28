@@ -12,11 +12,14 @@ await build({
     import assert from 'node:assert/strict';
     import { acquireCachedPdf, releaseDoc, docCacheStats } from './docCache';
     import { pdfWork } from './workQueue';
+    import { PageIndex } from './pageIndex';
     import { control } from 'pdfjs-dist';
+    globalThis.window={localPreview:{pdfResources:async()=>({pixels:24000000,bytes:384*1024*1024,documents:8}),onPdfResources:()=>()=>{},releasePdfResources:()=>{}}};
     const bytes = new Uint8Array(17);
     control.defer = true;
     const first = acquireCachedPdf('same', bytes);
     const second = acquireCachedPdf('same', bytes);
+    await new Promise(resolve=>setImmediate(resolve));
     assert.equal(control.loads.length, 1, 'in-flight parse must be shared');
     control.loads[0].resolve();
     const a = await first, b = await second;
@@ -34,6 +37,7 @@ await build({
     control.defer = false;
     const leases = [];
     for (let i=0;i<10;i++) leases.push(await acquireCachedPdf('p'+i, bytes));
+    assert.equal(control.workerStarts,2,'ten documents share one new worker after the first phase');
     assert.equal(docCacheStats().count, 10, 'active readers can exceed idle budget');
     assert.equal(control.loads.slice(1).some(x=>x.destroyed), false);
     leases[0].release(); leases[1].release();
@@ -49,8 +53,10 @@ await build({
 
     control.defer = true;
     const old = acquireCachedPdf('locked', bytes).catch(e=>e);
+    await new Promise(resolve=>setImmediate(resolve));
     const oldTask = control.loads.at(-1);
     const unlocked = acquireCachedPdf('locked', bytes, {password:'secret'});
+    await new Promise(resolve=>setImmediate(resolve));
     const newTask = control.loads.at(-1);
     assert.notEqual(oldTask, newTask, 'unlock must replace passwordless pending load');
     assert.equal(newTask.options.password,'secret');
@@ -78,15 +84,29 @@ await build({
     unblockBackground(); await bg; await queuedBackground;
     assert.equal(events.at(-1),'next-background');
     console.log('PASS PDF scheduling: bounded background work and foreground priority');
+    let finish;
+    const running=pdfWork(4,()=>new Promise(r=>finish=r));
+    const controller=new AbortController();let executed=false;
+    const cancelled=pdfWork(4,async()=>{executed=true},controller.signal).catch(e=>e);
+    controller.abort();assert.equal((await cancelled).name,'AbortError');
+    finish();await running;assert.equal(executed,false,'cancelled queued task must not execute');
+    const values=Array.from({length:1000},(_,i)=>100+i%7);
+    const positions=new PageIndex(values);
+    for(let i=0;i<100;i++){const at=(i*37)%1000;values[at]+=13;positions.set(at,values[at]);}
+    let sum=0;
+    for(let i=0;i<values.length;i++){assert.equal(positions.prefix(i),sum);assert.equal(positions.indexAt(sum+1),i);sum+=values[i];}
+    assert.equal(positions.prefix(values.length),sum);
+    console.log('PASS PDF cancellation and incremental mixed-size page positions');
   ` },
-  outfile, bundle: true, platform: "node", format: "esm", target: "node22",
+  outfile, bundle: true, platform: "node", format: "esm", target: "node22", external:['vue'],
   plugins: [{ name: "deterministic-pdf-loader", setup(plugin) {
     plugin.onResolve({ filter: /^pdfjs-dist$/ }, () => ({ path: "loader", namespace: "fake-pdf" }));
     plugin.onResolve({ filter: /pdf\.worker\.min\.mjs\?url$/ }, () => ({ path: "worker", namespace: "fake-pdf" }));
     plugin.onLoad({ filter: /.*/, namespace: "fake-pdf" }, args => ({ loader: "js", contents:
       args.path === "worker" ? 'export default "mock-worker";' : `
         export const GlobalWorkerOptions = {};
-        export const control = {defer:false,loads:[]};
+        export const control = {defer:false,loads:[],workerStarts:0,workerStops:0};
+        export class PDFWorker { constructor(){control.workerStarts++} destroy(){control.workerStops++} }
         export function getDocument(options) {
           let resolve, reject;
           const promise = new Promise((a,b)=>{resolve=a;reject=b});

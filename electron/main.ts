@@ -1,5 +1,6 @@
 import {setupPrintWindow} from "./printing/window";
 import { setupPrinting } from "./printing";
+import { setupPdfResources,pdfResourceStats } from './pdfResources';
 import { setupFullscreen, trackFullscreen } from "./fullscreen";
 import { registerFiles, releaseWindow, setupTransfers } from "./transfers";
 import {
@@ -15,7 +16,7 @@ import {
 } from "electron";
 import path from "node:path";
 import { SettingsStore } from "./settings";
-import { preparePreviewFile, loadPreparedFile, fileArguments } from "./files";
+import { preparePreviewFile, loadPreparedFile, fileArguments, preparedFileCount,rememberPdfPassword } from "./files";
 import { createLocalSession, protectWindow, trusted } from "./security";
 import {
   extensions,
@@ -24,6 +25,7 @@ import {
 } from "../shared/contracts";
 
 // Honor an explicit profile location (also used by packaged integration tests).
+export function previewResourceStats(){return {paths:preparedFileCount(),pdfWindows:pdfResourceStats().clients};}
 const profile = app.commandLine.getSwitchValue("user-data-dir");
 if (profile && path.isAbsolute(profile)) app.setPath("userData", profile);
 protocol.registerSchemesAsPrivileged([
@@ -197,8 +199,10 @@ export async function openPaths(paths: string[], mode?: "tabs" | "windows") {
     const files: PreviewFile[] = [];
     for (const name of group) files.push(await preparePreviewFile(name));
     const win = createWindow(true);
+    registerFiles(win.webContents.id, files);
     payloads.set(win.webContents.id, files);
-    await win.loadURL("preview://local/index.html?preview=1");
+    try { await win.loadURL("preview://local/index.html?preview=1"); }
+    catch(error) { if(!win.isDestroyed())win.destroy();throw error; }
     created.push(win);
   }
   return created;
@@ -243,10 +247,13 @@ export const ready = owner
       setupFullscreen();
       local = await createLocalSession(path.resolve(__dirname, "../dist"));
       setupPrinting(local);
+      setupPdfResources();
       setupPrintWindow(local, async (files) => {
         const win = createWindow(true);
+        registerFiles(win.webContents.id, files);
         payloads.set(win.webContents.id, files);
-        await win.loadURL("preview://local/index.html?preview=1");
+        try { await win.loadURL("preview://local/index.html?preview=1"); }
+        catch(error) { if(!win.isDestroyed())win.destroy();throw error; }
         return win;
       });
       ipcMain.handle("preview:select", async (event) => {
@@ -302,6 +309,7 @@ export const ready = owner
         return value;
       });
       ipcMain.handle('preview:load',async(event,file:PreviewFile)=>{trusted(event);return loadPreparedFile(file);});
+      ipcMain.handle('pdf:password',(event,id:string,password:string)=>{trusted(event);rememberPdfPassword(event.sender.id,id,password);});
       ipcMain.on("preview:close", (event) => {
         const win = BrowserWindow.fromWebContents(event.sender);
         if (win) closePreview(win);

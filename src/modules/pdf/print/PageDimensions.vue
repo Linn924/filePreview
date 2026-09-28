@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch, toRaw } from "vue";
 import { acquireCachedPdf } from "../docCache";
-import { pdfWork } from "../workQueue";
+import { pageSize } from "../metadata";
 import type { PreviewFile } from "../../../../shared/contracts";
 import {
   paperSize,
@@ -20,6 +20,7 @@ const showAll = ref(false);
 const MAX_SCAN = 40;
 let disposed = false;
 let releaseLease: (() => void) | undefined;
+const lifetime=new AbortController();
 
 const activePages = computed(() => {
   try {
@@ -42,16 +43,15 @@ async function load() {
   try {
     const source=await window.localPreview.loadPreview(toRaw(props.file));
     if(disposed||source.error)return;
-    const lease = await acquireCachedPdf(props.file.id, source.bytes);
+    const lease = await acquireCachedPdf(props.file.id, source.bytes,{password:source.view?.pdfPassword||props.file.view?.pdfPassword});
     if (disposed) { lease.release(); return; }
     releaseLease = lease.release;
     const pdf = lease.doc;
     const n = Math.min(pdf.numPages, MAX_SCAN);
     for (let i = 1; i <= n; i++) {
       if (disposed) return;
-      const page = await pdfWork(3, () => pdf.getPage(i));
+      const v = await pageSize(pdf,i,3,lifetime.signal);
       if (disposed) return;
-      const v = page.getViewport({ scale: 1 });
       pages.value.push({
         n: i,
         w: (v.width * 25.4) / 72,
@@ -73,6 +73,7 @@ watch(
 );
 onBeforeUnmount(() => {
   disposed = true;
+  lifetime.abort();
   releaseLease?.();
 });
 </script>

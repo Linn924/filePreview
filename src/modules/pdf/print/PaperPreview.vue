@@ -3,14 +3,15 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, toRaw } from "vue";
 import { acquireCachedPdf } from "../docCache";
 import type { RenderTask } from "pdfjs-dist";
 import { pdfWork } from "../workQueue";
+import { availablePdfPixels, allocatePdfCanvas, releasePdfCanvas } from '../canvasPool';
 import type { PreviewFile } from "../../../../shared/contracts";
 import {
   paperSize,
   selectedPages,
   applyPageOrder,
-  printScaleFactor,
   type PdfPrintOptions,
 } from "../../../../shared/printing";
+import { pdfRasterPlan } from './rasterPlan';
 
 const props = defineProps<{ file: PreviewFile; options: PdfPrintOptions }>();
 /** Coalesce obsolete draws per row; shared queue limits expanded rows. */
@@ -22,6 +23,7 @@ let releaseLease: (() => void) | undefined;
 let task: RenderTask | undefined;
 let revision = 0;
 let leasePromise: ReturnType<typeof acquireCachedPdf> | undefined;
+let drawing=new AbortController();
 
 const paper = computed(() => paperSize(props.options));
 const scaleLabel = computed(
@@ -38,19 +40,21 @@ const label = computed(
 );
 
 function draw() {
+  drawing.abort();drawing=new AbortController();
+  const signal=drawing.signal;
   const token = ++revision;
   task?.cancel();
-  drawChain = drawChain.then(() => token === revision && !disposed ? drawNow(token) : undefined).catch(() => {});
+  drawChain = drawChain.then(() => token === revision && !disposed ? drawNow(token,signal) : undefined).catch(() => {});
   return drawChain;
 }
-async function drawNow(token: number) {
+async function drawNow(token: number,signal:AbortSignal) {
   if (!canvas.value) return;
   error.value = "";
   try {
     if (!leasePromise) leasePromise = (async () => {
       const source = await window.localPreview.loadPreview(toRaw(props.file));
       if (source.error) throw Error(source.error);
-      return acquireCachedPdf(props.file.id, source.bytes);
+      return acquireCachedPdf(props.file.id, source.bytes,{password:source.view?.pdfPassword||props.file.view?.pdfPassword});
     })().then(lease => {
       if (disposed) lease.release();
       else releaseLease = lease.release;
@@ -64,21 +68,22 @@ async function drawNow(token: number) {
     const page = await pdf.getPage(pageNum);
     if (disposed || token !== revision) return;
     const original = page.getViewport({ scale: 1 });
-    const fit = printScaleFactor(original, paper.value, props.options.scale || "fit");
-    const displayScale = 0.35;
-    const viewport = page.getViewport({
-      scale: fit * displayScale * devicePixelRatio,
-    });
     await pdfWork(4, async () => {
       if (disposed || token !== revision || !canvas.value) return;
       const c = canvas.value;
-      c.width = Math.ceil(viewport.width);
-      c.height = Math.ceil(viewport.height);
-      task = page.render({ canvas: c, viewport });
+      const pixels=availablePdfPixels(c);
+      if(pixels<4)return;
+      const dpr=Math.min(2,devicePixelRatio);
+      let raster=pdfRasterPlan(original,paper.value,props.options.scale||'fit',0.55*25.4*dpr);
+      if(raster.width*raster.height>pixels)raster=pdfRasterPlan(original,paper.value,props.options.scale||'fit',0.55*25.4*dpr*Math.sqrt(pixels/(raster.width*raster.height)));
+      const viewport=page.getViewport({scale:raster.scale});
+      if(!allocatePdfCanvas(c,raster.width,raster.height))return;
+      c.style.width=raster.widthMm*0.55+'px';c.style.height=raster.heightMm*0.55+'px';
+      task = page.render({ canvas: c, viewport,transform:raster.transform });
       await task.promise;
-    });
+    },signal);
   } catch (e) {
-    if (!disposed && token === revision && (e as {name?:string})?.name !== 'RenderingCancelledException')
+    if (!disposed && token === revision && !['RenderingCancelledException','AbortError'].includes((e as {name?:string})?.name||''))
       error.value = e instanceof Error ? e.message : String(e);
   }
 }
@@ -96,10 +101,11 @@ watch(
 onMounted(() => void draw());
 onBeforeUnmount(() => {
   disposed = true;
+  drawing.abort();
   revision++;
   task?.cancel();
   releaseLease?.();
-  if (canvas.value) { canvas.value.width = 0; canvas.value.height = 0; }
+  if (canvas.value) releasePdfCanvas(canvas.value);
 });
 </script>
 <template>

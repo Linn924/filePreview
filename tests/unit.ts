@@ -22,6 +22,7 @@ import {
   printScaleFactor,
   paperSupportHint,
 } from "../shared/printing";
+import { pdfRasterPlan } from '../src/modules/pdf/print/rasterPlan';
 import { fitScale } from "../src/composables/fit";
 assert.deepEqual(paperSize({ ...printDefaults, paper: "A5" }), {
   width: 148,
@@ -67,7 +68,7 @@ assert.equal(fitScale(100, 200, 400, 400, "page"), 2);
 import { defaults, normalizeSettings, extensions } from "../shared/contracts";
 import { readFileSync } from "node:fs";
 import { clampZoom } from "../src/composables/zoom";
-import { fileArguments } from "../electron/files";
+import { fileArguments, retainPreparedFiles, releasePreparedReference, preparedFileCount } from "../electron/files";
 assert.equal(clampZoom(1), 25);
 assert.equal(clampZoom(1000), 400);
 assert.equal(clampZoom(137.4), 137);
@@ -96,7 +97,32 @@ assert.deepEqual(
 console.log(
   "PASS unit: zoom boundaries, settings validation, preference whitelist, command-line paths",
 );
+import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import path from 'node:path';
+mkdirSync('.test-build',{recursive:true});
+const sourceSample=path.resolve('.test-build/source-read.txt');
+writeFileSync(sourceSample,'local read sample\n'.repeat(50000));
+const countBefore=preparedFileCount();
+const metadata=await preparePreviewFile(sourceSample);retainPreparedFiles(1,[metadata]);retainPreparedFiles(2,[metadata]);
+const [read1,read2]=await Promise.all([loadPreparedFile(metadata),loadPreparedFile(metadata)]);
+assert.equal(read1.bytes,read2.bytes,'concurrent readers must share the filesystem read result');
+assert.equal(read1.bytes.byteOffset,0);assert.equal(read1.bytes.buffer.byteLength,read1.bytes.byteLength,'IPC bytes must not include pooled buffer padding');
+releasePreparedReference(1,metadata.id);assert.equal(preparedFileCount(),countBefore+1,'print/session owner keeps source valid');
+releasePreparedReference(2,metadata.id);assert.equal(preparedFileCount(),countBefore);
+assert.ok((await loadPreparedFile(metadata)).error.includes('关闭'));
+const closing=await preparePreviewFile(sourceSample);retainPreparedFiles(3,[closing]);
+const pendingRead=loadPreparedFile(closing);releasePreparedReference(3,closing.id);
+assert.ok((await pendingRead).error.includes('关闭'),'closed file must not refill bytes');
+assert.equal(preparedFileCount(),countBefore);unlinkSync(sourceSample);
+console.log('PASS file read single flight, source ownership and closing during read');
 const associations = readFileSync("electron-dist/associations.nsh", "utf8");
+const crop=pdfRasterPlan({width:595,height:842},{width:148,height:210},'actual',150);
+assert.equal(crop.scale,150/72);
+assert.ok(crop.widthMm<=128&&crop.heightMm<=190);
+assert.ok(crop.transform[4]<0&&crop.transform[5]<0);
+const enormous=pdfRasterPlan({width:595,height:1e9},{width:210,height:297},'actual',150);
+assert.ok(enormous.width*enormous.height<2_000_000,'huge original pages must rasterize only the printable crop');
+console.log('PASS actual-size PDF crop preserves scale with bounded print raster');
 for (const ext of extensions)
   assert.ok(
     associations.includes(`Software\\Classes\\.${ext}\\OpenWithProgids`),

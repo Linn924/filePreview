@@ -5,7 +5,8 @@ export function previewPixelRatio(
   width: number,
   height: number,
   deviceRatio: number,
+  pixelBudget = MAX_PREVIEW_PIXELS,
 ): number {
   const area = Math.max(1, width * height);
-  return Math.min(Math.max(1, deviceRatio), 2, Math.sqrt(MAX_PREVIEW_PIXELS / area));
+  return Math.min(Math.max(1, deviceRatio), 2, Math.sqrt(Math.min(MAX_PREVIEW_PIXELS,pixelBudget) / area),8192/Math.max(1,width),8192/Math.max(1,height));
 }

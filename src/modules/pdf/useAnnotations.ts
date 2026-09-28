@@ -1,14 +1,16 @@
-import {ref,watch} from 'vue';
+import {ref,watch,computed,onBeforeUnmount} from 'vue';
 import type {PreviewFile,PdfTemporaryMark} from '../../../shared/contracts';
 
 type Rect=PdfTemporaryMark['rects'][number];
 export function useAnnotations(file:PreviewFile){
  const notes=ref<PdfTemporaryMark[]>(file.view?.pdfNotes?.map(mark=>({...mark,rects:mark.rects.map(rect=>({...rect}))}))||[]);
  const pending=ref<{page:number;quote:string;rotation:PdfTemporaryMark['rotation'];rects:Rect[]}|null>(null);
- watch(notes,value=>{
+ function persist(value=notes.value){
   file.view??={zoom:100,scroll:[]};
   file.view.pdfNotes=value.map(mark=>({...mark,rects:mark.rects.map(rect=>({...rect}))}));
- },{deep:true,flush:'sync'});
+ }
+ watch(notes,persist,{deep:true,flush:'pre'});
+ onBeforeUnmount(()=>persist());
  function capture(root:HTMLElement|null,rotation:PdfTemporaryMark['rotation']){
   const selection=window.getSelection();
   if(!root||!selection||selection.isCollapsed){pending.value=null;return;}
@@ -35,7 +37,8 @@ export function useAnnotations(file:PreviewFile){
   window.getSelection()?.removeAllRanges();
  }
  function remove(id:string){notes.value=notes.value.filter(note=>note.id!==id);}
- const onPage=(page:number)=>notes.value.filter(note=>note.page===page);
+ const byPage=computed(()=>{const map=new Map<number,PdfTemporaryMark[]>();for(const note of notes.value){let page=map.get(note.page);if(!page){page=[];map.set(note.page,page);}page.push(note);}return map;});
+ const onPage=(page:number)=>byPage.value.get(page)||[];
  function rectStyle(mark:PdfTemporaryMark,rect:Rect,rotation:PdfTemporaryMark['rotation']){
   const delta=(rotation-mark.rotation+360)%360;
   const converted=delta===90?{x:1-rect.y-rect.height,y:rect.x,width:rect.height,height:rect.width}

@@ -26,6 +26,7 @@ let themeCleanup: (() => void) | undefined;
 const pending: PreviewFile[] = [];
 const visibleCount=ref(40);
 const visibleRows=computed(()=>files.value.slice(0,visibleCount.value));
+function removeFile(index:number){const row=files.value[index];window.localPreview.release(row.file.id);files.value.splice(index,1);}
 function extendRows(event:Event){const box=event.target as HTMLElement;if(box.scrollTop+box.clientHeight>=box.scrollHeight-280&&visibleCount.value<files.value.length)visibleCount.value=Math.min(files.value.length,visibleCount.value+40);}
 async function receive() {
   const incoming = await window.localPreview.printPanelFiles();
@@ -263,7 +264,7 @@ const orderLabel = (o?: string) =>
               :disabled="busy"
               title="移除"
               aria-label="移除"
-              @click="files.splice(index, 1)"
+              @click="removeFile(index)"
             >
               <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                 <path d="M3 5h10M6 5V3.5h4V5M5 5l.5 8h5L11 5M7 7.5v4M9 7.5v4" />

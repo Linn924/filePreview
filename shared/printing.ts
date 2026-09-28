@@ -59,6 +59,8 @@ export interface PdfPrintOptions {
   pageOrder: PrintPageOrder;
 }
 export interface PdfPrintJob {
+  /** Main-process job identity, never stored in user settings. */
+  token?: string;
   file: PreviewFile;
   options: PdfPrintOptions;
 }
@@ -150,6 +152,7 @@ export function printScaleFactor(
   if (mode === "shrink") return Math.min(1, fit);
   return fit;
 }
+
 export function paperSize(options: PdfPrintOptions) {
   let [width, height] =
     options.paper === "A3"

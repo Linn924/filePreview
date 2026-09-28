@@ -3,6 +3,7 @@ import path from "node:path";
 import { trusted, protectWindow } from "../security";
 import { registerFiles } from "../transfers";
 import type { PreviewFile } from "../../shared/contracts";
+import { retainPreparedFiles, releasePreparedOwner } from '../files';
 export function setupPrintWindow(
   local: Session,
   openPreview: (files: PreviewFile[]) => Promise<BrowserWindow>,
@@ -56,6 +57,7 @@ export function setupPrintWindow(
         },
       });
       protectWindow(panel);
+      const panelId=panel.webContents.id;
       panel.on("close", (e) => {
         if (busy && !quitting) {
           e.preventDefault();
@@ -67,13 +69,14 @@ export function setupPrintWindow(
         }
       });
       panel.on("closed", () => {
+        releasePreparedOwner(panelId);
         panel = undefined;
         incoming.length = 0;
         busy = false;
       });
       loading = panel
         .loadURL("preview://local/index.html?print-panel=1")
-        .then(() => {});
+        .then(() => {}).catch(error=>{if(panel&&!panel.isDestroyed())panel.destroy();throw error;});
       await loading;
       panel.show();
     } else {
@@ -82,6 +85,7 @@ export function setupPrintWindow(
       panel.show();
       panel.focus();
     }
+    if(panel&&!panel.isDestroyed())retainPreparedFiles(panel.webContents.id,list);
   });
   ipcMain.handle("print:panel-files", (event) => {
     trusted(event);

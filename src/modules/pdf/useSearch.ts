@@ -1,6 +1,7 @@
-import { ref, shallowRef, watch, onScopeDispose, getCurrentScope, type Ref } from "vue";
+import { ref, shallowRef, computed, watch, triggerRef, onScopeDispose, getCurrentScope, type Ref } from "vue";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { pageTextContent } from "./textCache";
+import { pageTextContent, canonicalPdfText } from "./textCache";
+import { foldPdfText } from './searchIndex';
 
 export interface SearchHit {
   /** 1-based page */
@@ -8,8 +9,6 @@ export interface SearchHit {
   /** char offset in page text */
   charOffset: number;
   length: number;
-  /** snippet around hit */
-  text: string;
 }
 
 export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
@@ -20,9 +19,11 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
   const error = ref("");
   const cache = new Map<number, string>();
   const MAX_CACHED_PAGES = 32;
+  let cacheBytes=0;
+  let controller = new AbortController();
   let searchRevision = 0;
 
-  async function pageText(n: number) {
+  async function pageText(n: number,signal?:AbortSignal) {
     let text = cache.get(n);
     if (text !== undefined) {
       cache.delete(n);
@@ -31,18 +32,21 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     }
     const doc = pdf.value;
     if (!doc) return "";
-    const content = await pageTextContent(doc, n, 3);
+    const content = await pageTextContent(doc, n, 3,signal);
     if (pdf.value !== doc) return "";
-    const parts = content.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .filter(Boolean);
-    text = parts.join(" ").replace(/\s+/g, " ").trim();
+    text = canonicalPdfText(content);
+    cacheBytes-=(cache.get(n)?.length||0)*2;
     cache.set(n, text);
-    if(cache.size>MAX_CACHED_PAGES)cache.delete(cache.keys().next().value!);
+    cacheBytes+=text.length*2;
+    while(cache.size>1&&(cache.size>MAX_CACHED_PAGES||cacheBytes>2*1024*1024)) {
+      const oldest=cache.keys().next().value!;cacheBytes-=cache.get(oldest)!.length*2;cache.delete(oldest);
+    }
     return text;
   }
 
   async function run(value = query.value) {
+    controller.abort();controller=new AbortController();
+    const signal=controller.signal;
     query.value = value;
     error.value = "";
     hits.value = [];
@@ -59,17 +63,18 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
       let lastPublish = performance.now();
       for (let n = 1; n <= doc.numPages; n++) {
         if (rev !== searchRevision) return;
-        const text = await pageText(n);
+        const text = await pageText(n,signal);
         if (rev !== searchRevision) return;
-        const hay = text.toLowerCase();
+        const {folded:hay,offsets}=foldPdfText(text);
         let at = hay.indexOf(needle);
         while (at >= 0) {
           if (rev !== searchRevision) return;
+          const start=offsets?.[at]??at;
+          const end=offsets?.[at+needle.length]??(at+needle.length);
           found.push({
             page: n,
-            charOffset: at,
-            length: needle.length,
-            text: text.slice(Math.max(0, at - 12), at + needle.length + 18),
+            charOffset: start,
+            length: Math.max(1,end-start),
           });
           at = hay.indexOf(needle, at + Math.max(1, needle.length));
         }
@@ -77,13 +82,14 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
           (active.value === -1 || performance.now() - lastPublish >= 100 || n === doc.numPages)){
           // Append only new hits; avoid re-copying the whole result list every tick.
           const prev = hits.value.length;
-          hits.value = prev ? hits.value.concat(found.slice(prev)) : found.slice();
+          for(let i=prev;i<found.length;i++)hits.value.push(found[i]);
+          triggerRef(hits);
           lastPublish = performance.now();
           if(active.value===-1)active.value=0;
         }
         if (n % 8 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
-      if (rev === searchRevision) hits.value = [...found];
+      if (rev === searchRevision) { for(let i=hits.value.length;i<found.length;i++)hits.value.push(found[i]);triggerRef(hits); }
     } catch (e) {
       if (rev === searchRevision)
         error.value = e instanceof Error ? e.message : String(e);
@@ -102,6 +108,7 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
       (active.value - 1 + hits.value.length) % hits.value.length;
   }
   function clear() {
+    controller.abort();
     searchRevision++;
     searching.value = false;
     query.value = "";
@@ -109,12 +116,13 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
     active.value = -1;
     error.value = "";
   }
-  watch(pdf, () => { clear(); cache.clear(); });
-  if (getCurrentScope()) onScopeDispose(() => { clear(); cache.clear(); });
+  watch(pdf, () => { clear(); cache.clear();cacheBytes=0; });
+  if (getCurrentScope()) onScopeDispose(() => { clear(); cache.clear();cacheBytes=0; });
   return {
     query,
     searching,
     hits,
+    count:computed(()=>hits.value.length),
     active,
     error,
     run,

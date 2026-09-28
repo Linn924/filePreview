@@ -12,6 +12,9 @@ export interface PreviewFile {
     encoding?: string;
     /** PDF temporary rotation in degrees; does not modify the source file. */
     rotate?: 0 | 90 | 180 | 270;
+    /** Session-only unlock state; never included in application settings. */
+    pdfPassword?: string;
+    pdfPrintAllowed?: boolean;
     /** PDF marks exist only in the active in-memory preview session. */
     pdfNotes?: PdfTemporaryMark[];
     excel?: {
@@ -111,7 +114,11 @@ export function normalizeSettings(
   };
 }
 export interface DesktopBridge {
+  pdfResources(): Promise<{pixels:number;bytes:number;documents:number}>;
+  releasePdfResources(): void;
+  onPdfResources(handler:(budget:{pixels:number;bytes:number;documents:number})=>void):()=>void;
   loadPreview(file:PreviewFile):Promise<PreviewFile>;
+  setPdfPassword(id:string,password:string):Promise<void>;
   openExternal(url: string): Promise<void>;
   openPrintPanel(files:PreviewFile[]):Promise<void>;
   printPanelFiles():Promise<PreviewFile[]>;
@@ -126,7 +133,7 @@ export interface DesktopBridge {
   selectPrintPdfs(): Promise<PreviewFile[]>;
   printPdf(job: import("./printing").PdfPrintJob): Promise<string>;
   consumePrint(): Promise<import("./printing").PdfPrintJob>;
-  printReady(error?: string): Promise<void>;
+  printReady(error?: string, token?: string): Promise<void>;
   setFullscreen(value: boolean): Promise<boolean>;
   onFullscreen(handler: (value: boolean) => void): () => void;
   claim(id: string): Promise<PreviewFile>;

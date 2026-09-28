@@ -1,6 +1,7 @@
 import { ipcMain, webContents, type WebContents } from "electron";
 import { trusted } from "./security";
 import type { PreviewFile } from "../shared/contracts";
+import { retainPreparedFiles, releasePreparedOwner, releasePreparedReference, transferPreparedReference,discardUnownedFiles } from './files';
 const owners = new Map<string, number>();
 const pending = new Map<
   string,
@@ -13,9 +14,13 @@ const pending = new Map<
   }
 >();
 export function registerFiles(sender: number, files: PreviewFile[]) {
+  const window=webContents.fromId(sender);
+  if(!window||window.isDestroyed()){discardUnownedFiles(files);return;}
+  retainPreparedFiles(sender,files);
   for (const file of files) owners.set(file.id, sender);
 }
 export function releaseWindow(sender: number) {
+  releasePreparedOwner(sender);
   for (const [id, owner] of owners) if (owner === sender)owners.delete(id);
   for (const [id, p] of pending)
     if (p.source === sender || p.target === sender) {
@@ -59,9 +64,12 @@ export function setupTransfers() {
     clearTimeout(p.timer);
     pending.delete(id);
     owners.set(id, p.target);
+    // Retain destination before source tab acknowledges its removal.
+    transferPreparedReference(p.source,p.target,id);
     webContents.fromId(p.source)?.send("tabs:remove", id);
   });
   ipcMain.on("tabs:release", (event, id: string) => {
+    releasePreparedReference(event.sender.id,id);
     if (owners.get(id) === event.sender.id)owners.delete(id);
   });
 }

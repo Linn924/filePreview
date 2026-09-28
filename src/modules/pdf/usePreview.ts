@@ -4,6 +4,10 @@ import { createSafeResizeObserver } from "../../composables/safeResizeObserver";
 import { previewPixelRatio } from "./bitmap";
 import { acquireCachedPdf } from "./docCache";
 import { pdfWork } from "./workQueue";
+import { PageIndex } from './pageIndex';
+import { cachedPageSize, rememberPageSize, pageSize } from './metadata';
+import { pdfResources } from './resources';
+import { allocatePdfCanvas, availablePdfPixels, releasePdfCanvas } from './canvasPool';
 import {
   onMounted,
   onBeforeUnmount,
@@ -26,7 +30,7 @@ const OVERSCAN = 2;
 const PAGE_GAP = 24;
 const SCROLL_PADDING = 26;
 
-export function usePreview(props: PreviewProps, emit: PreviewEmit) {
+export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermission?:(allowed:boolean,password?:string)=>void) {
   GlobalWorkerOptions.workerSrc = workerUrl;
   const scroll = ref<HTMLElement>();
   const layout = ref(0);
@@ -49,9 +53,17 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   let refreshing = false;
   let refreshAgain = false;
   let scanningSizes = false;
+  let bootstrapRevision=0;
   let scrollFrame = 0;
+  const lifetime = new AbortController();
+  let generation = new AbortController();
+  let positions = new PageIndex([]);
+  let lastGeometry='';
+  const geometryKey=()=>[props.zoom,props.fitMode,rotate.value,scroll.value?.clientWidth,props.fitMode==='page'?scroll.value?.clientHeight:0].join(':');
+  const ownedCanvases = new Set<HTMLCanvasElement>();
   const rendered = new Map<number, HTMLCanvasElement>();
   const tasks = new Map<number, {task:RenderTask;canvas:HTMLCanvasElement}>();
+  let sizeQueue=Promise.resolve();
   const pending = new Set<number>();
   const failed = new Set<number>();
   const retries = new Map<number, number>();
@@ -89,34 +101,19 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     return { width: width + "px", height: height + "px" };
   }
 
-  /** Cumulative offsets for virtualization (prefix[0]=0). */
-  const offsets = computed(() => {
-    void layout.value;
-    const list = [0];
-    for (let i = 0; i < pages.value.length; i++)
-      list.push(list[i] + pageCss(i).height + PAGE_GAP);
-    return list;
-  });
+  function offsetAt(index:number) { void layout.value;return positions.prefix(index); }
+  function rebuildPositions() {
+    positions = new PageIndex(pages.value.map((_,i)=>pageCss(i).height+PAGE_GAP));
+    layout.value++;
+  }
   function indexAtOffset(y: number) {
-    const o = offsets.value;
-    let lo = 0,
-      hi = Math.max(0, pages.value.length - 1);
-    if (!o.length) return 0;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (o[mid + 1] <= y) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
+    return positions.indexAt(y);
   }
   const virtualStart = ref(0);
   const virtualEnd = ref(1);
-  const padTop = computed(() => offsets.value[virtualStart.value] || 0);
+  const padTop = computed(() => offsetAt(virtualStart.value));
   const padBottom = computed(() => {
-    const o = offsets.value;
-    const total = o[o.length - 1] || 0;
-    const end = o[virtualEnd.value] ?? total;
-    return Math.max(0, total - end);
+    return Math.max(0, offsetAt(pages.value.length) - offsetAt(virtualEnd.value));
   });
   const visiblePages = computed(() => {
     const out: number[] = [];
@@ -149,12 +146,15 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     const index = Math.max(0, Math.min(n, Math.floor(value) || 1) - 1);
     const root = scroll.value;
     if (!root || !n) return;
-    root.scrollTop = Math.max(0, offsets.value[index] || 0);
+    root.scrollTop = Math.max(0, offsetAt(index));
     current.value = index + 1;
     updateVirtualWindow();
   }
 
-  async function updateSizes(
+  function updateSizes(updates:Array<{index:number;width:number;height:number}>) {
+    sizeQueue=sizeQueue.then(()=>applySizes(updates));return sizeQueue;
+  }
+  async function applySizes(
     updates: Array<{ index: number; width: number; height: number }>,
   ) {
     if (disposed) return;
@@ -167,15 +167,16 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     const root = scroll.value;
     const beforeTop = root?.scrollTop;
     const anchorPage = current.value - 1;
-    const anchorOffsetBefore = offsets.value[anchorPage] || 0;
+    const anchorOffsetBefore = offsetAt(anchorPage);
     for (const p of updates)
       pages.value[p.index] = { width: p.width, height: p.height };
+    for(const p of updates)positions.set(p.index,pageCss(p.index).height+PAGE_GAP);
     layout.value++;
     if (updates.some(p=>p.index>=virtualStart.value&&p.index<virtualEnd.value))
       textGeometry.value++;
     await nextTick();
     if (!disposed && root && beforeTop !== undefined) {
-      const anchorOffsetAfter = offsets.value[anchorPage] || 0;
+      const anchorOffsetAfter = offsetAt(anchorPage);
       root.scrollTop = beforeTop + (anchorOffsetAfter - anchorOffsetBefore);
     }
     updateVirtualWindow();
@@ -197,34 +198,43 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   }
 
   function releaseCanvas(canvas: HTMLCanvasElement) {
-    canvas.width = 0;
-    canvas.height = 0;
+    ownedCanvases.delete(canvas);
+    releasePdfCanvas(canvas);
   }
 
   function render(index: number) {
     if (pending.has(index) || failed.has(index)) return queue;
     pending.add(index);
     const token = revision;
+    const signal = generation.signal;
     queue = queue
       .then(() => pdfWork(0, async () => {
+        if(scroll.value)scroll.value.dataset.pdfStage='render-work';
         if (disposed || token !== revision || !pdf || !inRenderRange(index))
           return;
         const canvas = pageEl(index)?.querySelector("canvas");
         if (!canvas) return;
         if (rendered.get(index) === canvas && canvas.width > 0) return;
         const page = await pdf.getPage(index + 1);
+        if(scroll.value)scroll.value.dataset.pdfStage='render-page';
         if (disposed || token !== revision || !inRenderRange(index)) return;
         const original = page.getViewport({ scale: 1 });
+        rememberPageSize(pdf,index+1,{width:original.width,height:original.height});
         await updateSizes([
           { index, width: original.width, height: original.height },
         ]);
+        if(scroll.value)scroll.value.dataset.pdfStage='render-sized';
         if (disposed || token !== revision || !inRenderRange(index)) return;
         const d = displayWH(index);
         const cssScale = scale(d.width, d.height);
+        const off = document.createElement("canvas");
+        const allowance=Math.min(availablePdfPixels(),pdfResources.value.pixels / (2 * Math.max(2,visiblePages.value.length)));
+        if(allowance<4)return;
         const ratio = previewPixelRatio(
           d.width * cssScale,
           d.height * cssScale,
           devicePixelRatio,
+          allowance,
         );
         const viewport = page.getViewport({
           scale: cssScale * ratio,
@@ -232,35 +242,34 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         });
         // Render offscreen, then blit: continuous zoom/resize keeps old pixels
         // until the new bitmap is ready (avoids a long white flash).
-        const off = document.createElement("canvas");
-        off.width = Math.max(1, Math.floor(viewport.width));
-        off.height = Math.max(1, Math.floor(viewport.height));
+        if(!allocatePdfCanvas(off,Math.max(1,Math.floor(viewport.width)),Math.max(1,Math.floor(viewport.height)),true))return;
         const context = off.getContext("2d", { alpha: false });
-        if (!context) return;
+        if (!context) { releasePdfCanvas(off);return; }
         context.fillStyle = "#fff";
         context.fillRect(0, 0, off.width, off.height);
         const task = page.render({ canvas: off, canvasContext: context, viewport });
         tasks.set(index, {task,canvas});
         try {
+          if(scroll.value)scroll.value.dataset.pdfStage='render-task';
           await task.promise;
-          if (disposed || token !== revision || !inRenderRange(index)) return;
-          canvas.width = off.width;
-          canvas.height = off.height;
+          if(scroll.value)scroll.value.dataset.pdfStage='render-pixels';
+          if (disposed || token !== revision || !inRenderRange(index) || pageEl(index)?.querySelector('canvas')!==canvas) return;
+          if(!allocatePdfCanvas(canvas,off.width,off.height))return;
+          ownedCanvases.add(canvas);
           const target = canvas.getContext("2d", { alpha: false });
           if (!target) return;
           target.drawImage(off, 0, 0);
           rendered.set(index, canvas);
           retries.delete(index);
         } finally {
-          off.width = 0;
-          off.height = 0;
+          releasePdfCanvas(off);
           // Keep the live bitmap when a newer refresh supersedes this task.
           if (disposed) releaseCanvas(canvas);
           if (tasks.get(index)?.task === task) tasks.delete(index);
         }
-      }))
+      },signal))
       .catch((e) => {
-        if (!disposed && e?.name !== "RenderingCancelledException") {
+        if (!disposed && token===revision && e?.name !== "RenderingCancelledException" && e?.name!=='AbortError') {
           failed.add(index);
           emit("error", "PDF 页面无法显示：" + String(e));
         }
@@ -280,6 +289,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
 
   function observe() {
     observer?.disconnect();
+    for(const canvas of ownedCanvases) {
+      if(!canvas.isConnected || !scroll.value?.contains(canvas))releaseCanvas(canvas);
+    }
     for (const [index, canvas] of rendered) {
       if (pageEl(index)?.querySelector("canvas") !== canvas) {
         releaseCanvas(canvas);
@@ -296,7 +308,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
             const canvas = e.target.querySelector("canvas")!;
             const running=tasks.get(i);
             if(running?.canvas===canvas)running.task.cancel();
-            if (rendered.get(i) === canvas) {
+            if (ownedCanvases.has(canvas)) {
               releaseCanvas(canvas);
               rendered.delete(i);
             }
@@ -316,8 +328,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     if (refreshing) { refreshAgain = true; return; }
     refreshing = true;
     try {
-      layout.value++;
-      textGeometry.value++;
+      generation.abort();generation=new AbortController();
+      const geometry=geometryKey();
+      if(geometry!==lastGeometry){lastGeometry=geometry;rebuildPositions();textGeometry.value++;}
       revision++;
       failed.clear();
       retries.clear();
@@ -349,7 +362,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     void refresh();
   }
 
-  async function bootstrap(password?: string) {
+  async function bootstrap(password=props.file.view?.pdfPassword) {
+    const attempt=++bootstrapRevision;
     needPassword.value = false;
     passwordError.value = "";
     try {
@@ -360,33 +374,42 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         wasmUrl: base + "wasm/",
         password,
       });
-      if (disposed) { lease.release(); return; }
+      if(scroll.value)scroll.value.dataset.pdfStage='document';
+      if (disposed||attempt!==bootstrapRevision) { lease.release(); return; }
       releaseLease?.();
       releaseLease = lease.release;
       const doc = lease.doc;
       pdf = doc;
       pdfRef.value = doc;
       try {
-        const perms = (await doc.getPermissions()) as number | null;
-        // null/undefined = unlimited; otherwise bit flags (PDF.js PermissionFlag)
+        const perms = await doc.getPermissions();
         if (perms == null) allowPrint.value = true;
-        else allowPrint.value = ((Number(perms) & 4) === 4); // PRINT = 0x04
+        else allowPrint.value = perms.has(4);
       } catch {
         allowPrint.value = true;
       }
+      props.file.view ??= {zoom:props.zoom,scroll:[]};
+      props.file.view.pdfPrintAllowed=allowPrint.value;
+      if(password)props.file.view.pdfPassword=password;
+      if(password)await window.localPreview.setPdfPassword(props.file.id,password);
+      publishPermission?.(allowPrint.value,password);
       if (disposed) return;
       const first = await doc.getPage(1);
       if (disposed) return;
       const initial = first.getViewport({ scale: 1 });
-      pages.value = Array.from({ length: doc.numPages }, () => ({
+      rememberPageSize(doc,1,{width:initial.width,height:initial.height});
+      pages.value = Array.from({ length: doc.numPages }, (_,index) => cachedPageSize(doc,index+1) || ({
         width: initial.width,
         height: initial.height,
       }));
+      rebuildPositions();
+      lastGeometry=geometryKey();
       virtualStart.value = 0;
       virtualEnd.value = Math.min(doc.numPages, 3);
       await nextTick();
       updateVirtualWindow();
       await render(virtualStart.value);
+      if(scroll.value)scroll.value.dataset.pdfStage='bootstrap-ready';
       if (disposed) return;
       observe();
       if (!resize && scroll.value) {
@@ -398,7 +421,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       if (scanningSizes) return;
       scanningSizes = true;
       let sizes: Array<{ index: number; width: number; height: number }> = [];
-      const remaining = new Set(Array.from({length: Math.max(0, doc.numPages - 1)}, (_, i) => i + 2));
+      const remaining = new Set(Array.from({length: Math.max(0, doc.numPages - 1)}, (_, i) => i + 2).filter(n=>!cachedPageSize(doc,n)));
       let scanCursor = 2;
       while (remaining.size) {
         if (disposed) return;
@@ -407,9 +430,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
         while (scanCursor <= doc.numPages && !remaining.has(scanCursor)) scanCursor++;
         const n = [near, near + 1, near - 1, near + 2].find(page => remaining.has(page)) ?? scanCursor;
         remaining.delete(n);
-        const p = await pdfWork(3, () => doc.getPage(n));
+        const v = await pageSize(doc,n,3,lifetime.signal);
         if (disposed) return;
-        const v = p.getViewport({ scale: 1 });
         sizes.push({ index: n - 1, width: v.width, height: v.height });
         if (sizes.length === 64 || !remaining.size || (n >= current.value && n <= current.value + 2)) {
           await updateSizes(sizes);
@@ -420,7 +442,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       updateVirtualWindow();
       observe();
     } catch (e) {
-      if (disposed) return;
+      if (disposed||attempt!==bootstrapRevision) return;
       const name = (e as { name?: string })?.name || "";
       if (name === "PasswordException" || /password/i.test(String(e))) {
         needPassword.value = true;
@@ -447,6 +469,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
     () => props.zoom,
     scheduleRefresh,
   );
+  watch(pdfResources,scheduleRefresh);
   watch(
     () => props.fitMode,
     async () => {
@@ -458,13 +481,14 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
   );
   onBeforeUnmount(() => {
     disposed = true;
+    lifetime.abort();generation.abort();
     clearTimeout(refreshTimer);
     cancelAnimationFrame(scrollFrame);
     revision++;
     observer?.disconnect();
     resize?.disconnect();
     tasks.forEach(({task}) => task.cancel());
-    for (const canvas of rendered.values()) releaseCanvas(canvas);
+    for (const canvas of ownedCanvases) releaseCanvas(canvas);
     rendered.clear();
     releaseLease?.();
   });

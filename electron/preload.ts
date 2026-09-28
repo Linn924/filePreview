@@ -2,7 +2,15 @@ import { contextBridge, ipcRenderer, shell, webUtils } from "electron";
 import type { DesktopBridge, Settings } from "../shared/contracts";
 
 const bridge: DesktopBridge = {
+  pdfResources:()=>ipcRenderer.invoke('pdf:resources'),
+  releasePdfResources:()=>ipcRenderer.send('pdf:resources-release'),
+  onPdfResources:handler=>{
+    const listener=(_event:Electron.IpcRendererEvent,value:{pixels:number;bytes:number;documents:number})=>handler(value);
+    ipcRenderer.on('pdf:resources',listener);
+    return ()=>ipcRenderer.removeListener('pdf:resources',listener);
+  },
   loadPreview: (file) => ipcRenderer.invoke("preview:load", file),
+  setPdfPassword:(id,password)=>ipcRenderer.invoke('pdf:password',id,password),
   openExternal: async (url: string) => {
     if (!/^https?:\/\//i.test(url)) throw Error("仅允许打开 http(s) 链接。");
     await shell.openExternal(url);
@@ -34,7 +42,7 @@ const bridge: DesktopBridge = {
   selectPrintPdfs: () => ipcRenderer.invoke("print:select"),
   printPdf: (job) => ipcRenderer.invoke("print:submit", job),
   consumePrint: () => ipcRenderer.invoke("print:consume"),
-  printReady: (error) => ipcRenderer.invoke("print:ready", error),
+  printReady: (error,token) => ipcRenderer.invoke("print:ready", error,token),
   setFullscreen: (value) => ipcRenderer.invoke("window:fullscreen", value),
   onFullscreen: (handler) => {
     const listener = (_e: Electron.IpcRendererEvent, value: boolean) =>

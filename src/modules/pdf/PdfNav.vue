@@ -9,6 +9,8 @@ import {
 } from "vue";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { pdfWork } from "./workQueue";
+import { pageSize } from './metadata';
+import { allocatePdfCanvas, releasePdfCanvas, availablePdfPixels } from './canvasPool';
 
 const props = defineProps<{
   pdf: PDFDocumentProxy | undefined;
@@ -43,21 +45,22 @@ const paintJobs = new Map<number, Promise<void>>();
 const paintedPages = new Map<number, HTMLCanvasElement>();
 let disposed = false;
 let thumbGeneration=0;
+let paintController=new AbortController();
+const lifetime=new AbortController();
+const sizeJobs=new Map<number,Promise<void>>();
+const sized=new Set<number>();
 
 async function loadOutline() {
   outline.value = [];
   collapsed.value = new Set();
   if (!props.pdf) return;
   try {
-    const items = await props.pdf.getOutline();
+    const doc=props.pdf;
+    const items = await doc.getOutline();
     if (!items?.length) return;
-    const dests = (await props.pdf.getDestinations()) as
-      | Map<string, unknown>
-      | Record<string, unknown>;
-    const destOf = (name: string) =>
-      dests instanceof Map
-        ? dests.get(name)
-        : (dests as Record<string, unknown>)[name];
+    const destinations=new Map<string,Promise<unknown>>();
+    const destOf=(name:string)=>{let value=destinations.get(name);if(!value){value=doc.getDestination(name);destinations.set(name,value);}return value;};
+    const nodes:OutlineNode[]=[];
     const walk = async (
       list: typeof items,
       depth: number,
@@ -65,12 +68,13 @@ async function loadOutline() {
       path: string,
     ): Promise<void> => {
       for (let i = 0; i < list.length; i++) {
+        if(disposed||props.pdf!==doc)return;
         const item = list[i];
         const key = `${path}.${i}`;
         let page = 0;
         try {
           const dest =
-            typeof item.dest === "string" ? destOf(item.dest) : item.dest;
+            typeof item.dest === "string" ? await destOf(item.dest) : item.dest;
           if (Array.isArray(dest) && dest[0] != null) {
             const refObj = dest[0];
             page =
@@ -82,7 +86,7 @@ async function loadOutline() {
           page = 0;
         }
         const hasChildren = !!(item.items && item.items.length);
-        outline.value.push({
+        nodes.push({
           title: item.title || "未命名",
           page,
           depth,
@@ -92,9 +96,11 @@ async function loadOutline() {
         });
         if (hasChildren && depth >= 2) collapsed.value.add(key);
         if (item.items?.length) await walk(item.items, depth + 1, key, key);
+        if(nodes.length%50===0)await new Promise<void>(resolve=>setTimeout(resolve,0));
       }
     };
     await walk(items, 0, null, "r");
+    if(!disposed&&props.pdf===doc)outline.value=nodes;
   } catch {
     outline.value = [];
   }
@@ -107,11 +113,12 @@ function toggleOutline(key: string) {
   collapsed.value = next;
 }
 
+const outlineByKey=computed(()=>new Map(outline.value.map(node=>[node.key,node])));
 function outlineHidden(item: OutlineNode) {
   let p = item.parentKey;
   while (p) {
     if (collapsed.value.has(p)) return true;
-    p = outline.value.find((n) => n.key === p)?.parentKey ?? null;
+    p = outlineByKey.value.get(p)?.parentKey ?? null;
   }
   return false;
 }
@@ -145,12 +152,14 @@ watch(currentOutlineKey,async key=>{
 
 function resetThumbs(){
  thumbGeneration++;
+ paintController.abort();paintController=new AbortController();
  for(const task of tasks.values())task.cancel();
- paintedPages.clear();
+ for(const canvas of paintedPages.values())releasePdfCanvas(canvas);
+ paintedPages.clear();sized.clear();
  heights.value=Array.from({length:pageCount.value},()=>estimateHeight.value);
  thumbHost.value?.querySelectorAll<HTMLElement>('.thumb').forEach(node=>{
   node.classList.remove('thumb-painted');
-  const canvas=node.querySelector('canvas');if(canvas){canvas.width=0;canvas.height=0;}
+  const canvas=node.querySelector('canvas');if(canvas)releasePdfCanvas(canvas);
  });
  const active=[...paintJobs.values()];
  void Promise.allSettled(active).then(()=>nextTick()).then(()=>{if(!disposed){updateVirtual();schedulePaint();}});
@@ -185,17 +194,23 @@ function initThumbsMeta() {
   heights.value = Array.from({ length: props.pdf.numPages }, () => estimateHeight.value);
 }
 
-async function ensureSize(index: number) {
+async function readSize(index: number) {
   if (!props.pdf) return;
-  if (heights.value[index] !== estimateHeight.value) return;
+  if (sized.has(index)) return;
   try {
-    const page = await props.pdf.getPage(index + 1);
-    const v = page.getViewport({ scale: 1 });
+    const doc=props.pdf,generation=thumbGeneration;
+    const v = await pageSize(doc,index+1,3,lifetime.signal);
+    if(disposed||doc!==props.pdf||generation!==thumbGeneration)return;
     const h = Math.round((v.height / (v.width || 1)) * thumbCssW.value) || estimateHeight.value;
     heights.value[index] = h;
+    sized.add(index);
   } catch {
     /* keep estimate */
   }
+}
+function ensureSize(index:number) {
+  if(sizeJobs.has(index))return sizeJobs.get(index)!;
+  const job=readSize(index).finally(()=>sizeJobs.delete(index));sizeJobs.set(index,job);return job;
 }
 
 const offsets = computed(() => {
@@ -275,12 +290,14 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
         canvas.clientHeight ||
         estimateHeight.value;
       heights.value[pageNumber] = cssH;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      sized.add(pageNumber);
+      const allowance=availablePdfPixels(canvas);
+      if(allowance<4)return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2,Math.sqrt(allowance/(cssW*cssH)));
       const viewport = pdfPage.getViewport({
         scale: (cssW / (base.width || 1)) * dpr,
       });
-      canvas.width = Math.max(1, Math.round(viewport.width));
-      canvas.height = Math.max(1, Math.round(viewport.height));
+      if(!allocatePdfCanvas(canvas,Math.max(1,Math.floor(viewport.width)),Math.max(1,Math.floor(viewport.height))))return;
       canvas.style.width = cssW + "px";
       canvas.style.height = cssH + "px";
       const ctx = canvas.getContext("2d", { alpha: false });
@@ -296,7 +313,7 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
       paintedPages.set(pageNumber,canvas);
       node.classList.add("thumb-painted");
     } catch (e) {
-      if ((e as { name?: string })?.name === "RenderingCancelledException")
+      if ((e as { name?: string })?.name === "RenderingCancelledException" || (e as {name?:string})?.name==='AbortError')
         return;
       node.classList.remove("thumb-painted");
       paintedPages.delete(pageNumber);
@@ -309,8 +326,10 @@ async function paintOne(node: HTMLElement, pageNumber: number) {
           requestAnimationFrame(()=>{if(!disposed) schedulePaint();});
       }
     }
-  });
+  },paintController.signal);
+  void job.catch(()=>{});
   paintJobs.set(pageNumber, job);
+  void job.finally(()=>{if(paintJobs.get(pageNumber)===job)paintJobs.delete(pageNumber);}).catch(()=>{});
   return job;
 }
 
@@ -320,6 +339,7 @@ function schedulePaint() {
   const host = thumbHost.value;
   const hostRect = host.getBoundingClientRect();
   const nodes = Array.from(host.querySelectorAll<HTMLElement>(".thumb"));
+  for(const [page,canvas] of paintedPages)if(!canvas.isConnected){releasePdfCanvas(canvas);paintedPages.delete(page);}
   for (const node of nodes) {
     const page = Number(node.dataset.page) - 1;
     if (!Number.isFinite(page) || page < 0) continue;
@@ -392,6 +412,7 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
   disposed = true;
+  lifetime.abort();paintController.abort();
   for (const [, task] of tasks) {
     try {
       task.cancel();
@@ -401,6 +422,9 @@ onBeforeUnmount(() => {
   }
   tasks.clear();
   paintJobs.clear();
+  for(const canvas of paintedPages.values())releasePdfCanvas(canvas);
+  thumbHost.value?.querySelectorAll('canvas').forEach(releasePdfCanvas);
+  paintedPages.clear();sizeJobs.clear();
 });
 const hasOutline = computed(() => outline.value.length > 0);
 </script>

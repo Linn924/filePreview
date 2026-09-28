@@ -1,7 +1,8 @@
 import { BrowserWindow, ipcMain, dialog, shell, type Session } from "electron";
 import path from "node:path";
+import { randomUUID } from 'node:crypto';
 import { trusted, protectWindow } from "../security";
-import { preparePreviewFile,loadPreparedFile } from "../files";
+import { preparePreviewFile,loadPreparedFile,retainPreparedFiles,discardUnownedFiles } from "../files";
 import { validatePrintOptions, type PdfPrintJob } from "../../shared/printing";
 interface ActiveJob {
   owner: number;
@@ -11,6 +12,8 @@ interface ActiveJob {
   window: BrowserWindow;
   timer: ReturnType<typeof setTimeout>;
   submitting?: boolean;
+  token: string;
+  consumed?: boolean;
 }
 const jobs = new Map<number, ActiveJob>();
 let queue = Promise.resolve();
@@ -19,7 +22,10 @@ let idleTimer: ReturnType<typeof setTimeout> | undefined;
 export function setupPrinting(local: Session) {
   ipcMain.handle("print:drop",async(event,paths:unknown)=>{trusted(event);if(!Array.isArray(paths)||paths.some(p=>typeof p!=="string"||!path.isAbsolute(p)))throw Error("请只拖入本机文件。");
     const allowed=new Set(["pdf","png","jpg","jpeg","webp","gif","bmp","svg","docx"]);
-    const files=[];for(const name of paths){const ext=path.extname(name).slice(1).toLowerCase();if(!allowed.has(ext))throw Error("支持 PDF、图片和 DOCX。");files.push(await preparePreviewFile(name));}return files;});
+    if(paths.some(name=>!allowed.has(path.extname(name).slice(1).toLowerCase())))throw Error('支持 PDF、图片和 DOCX。');
+    const files=[];for(const name of paths)files.push(await preparePreviewFile(name));
+    if(event.sender.isDestroyed()){discardUnownedFiles(files);throw Error('打印窗口已关闭。');}
+    retainPreparedFiles(event.sender.id,files);return files;});
   ipcMain.handle("print:printers", async (event) => {
     trusted(event);
     const list = await event.sender.getPrintersAsync();
@@ -64,12 +70,17 @@ export function setupPrinting(local: Session) {
     if (result.canceled) return [];
     const files=[];
     for(const path of result.filePaths)files.push(await preparePreviewFile(path));
+    if(event.sender.isDestroyed()){discardUnownedFiles(files);return [];}
+    retainPreparedFiles(event.sender.id,files);
     return files;
   });
   const printable = new Set(["pdf", "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "docx"]);
   ipcMain.handle("print:submit", async (event, value: PdfPrintJob) => {
     trusted(event);
     const options = validatePrintOptions(value?.options);
+    const owner = event.sender;
+    const run = queue.then(async () => {
+    if(owner.isDestroyed())throw Error('预览窗口已关闭。');
     const file = value?.file && await loadPreparedFile(value.file);
     if (
       !file ||
@@ -83,10 +94,7 @@ export function setupPrinting(local: Session) {
     const printers = await event.sender.getPrintersAsync();
     if (!printers.some((p) => p.name === options.deviceName))
       throw Error("打印机不可用，请重新选择。");
-    const owner = event.sender;
-    const run = queue.then(
-      () =>
-        new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
           if (owner.isDestroyed()) {
             reject(Error("预览窗口已关闭。"));
             return;
@@ -115,17 +123,19 @@ export function setupPrinting(local: Session) {
             });
           }
           const id = win.webContents.id;
+          const token=randomUUID();
           const abort = () =>
-            finish(id, Error("预览窗口已关闭，停止准备打印。"));
+            finish(id, Error("预览窗口已关闭，停止准备打印。"),token);
           owner.once("destroyed", abort);
           const timer = setTimeout(
-            () => finish(id, Error("打印准备超时，请减少页数后重试。")),
+            () => finish(id, Error("打印准备超时，请减少页数后重试。"),token),
             180000,
           );
           preparedOptions.set(id, options);
           jobs.set(id, {
             owner: owner.id,
-            job: { file, options },
+            token,
+            job: { file, options, token },
             window: win,
             timer,
             resolve: () => {
@@ -139,9 +149,9 @@ export function setupPrinting(local: Session) {
           });
           void win
             .loadURL("preview://local/index.html?print=1")
-            .catch((e) => finish(id, e));
-        }),
-    );
+            .catch((e) => finish(id, e,token));
+        });
+    });
     queue = run.catch(() => {});
     await run;
     return "submitted";
@@ -151,22 +161,24 @@ export function setupPrinting(local: Session) {
     const entry = jobs.get(event.sender.id);
     if (!entry?.job) throw Error("打印任务已释放。");
     const job = entry.job;
+    entry.consumed=true;
     entry.job = undefined;
     return job;
   });
-  ipcMain.handle("print:ready", async (event, error?: string) => {
+  ipcMain.handle("print:ready", async (event, error?: string,token?:string) => {
     trusted(event);
     const entry = jobs.get(event.sender.id);
     if (!entry) return;
+    if(!entry.consumed||token!==entry.token)return;
     if (entry.submitting) return;
     if (error) {
-      finish(event.sender.id, Error(error));
+      finish(event.sender.id, Error(error),token);
       return;
     }
     // Options are retained separately in the print window's prepared payload.
     const options = preparedOptions.get(event.sender.id);
     if (!options) {
-      finish(event.sender.id, Error("打印设置已释放。"));
+      finish(event.sender.id, Error("打印设置已释放。"),token);
       return;
     }
     entry.submitting = true;
@@ -196,6 +208,7 @@ export function setupPrinting(local: Session) {
                     ? `当前打印机可能不支持 ${options.paper}，请改用 A4 或在驱动中启用 ${options.paper}。`
                     : `打印任务提交失败（${reason || "未知原因"}）。若纸张为 ${options.paper}，请确认打印机驱动已支持该尺寸。`,
               ),
+          token,
         );
       },
     );
@@ -203,9 +216,10 @@ export function setupPrinting(local: Session) {
 }
 import type { PdfPrintOptions } from "../../shared/printing";
 const preparedOptions = new Map<number, PdfPrintOptions>();
-function finish(id: number, error?: Error) {
+function finish(id: number, error?: Error,token?:string) {
   const entry = jobs.get(id);
   if (!entry) return;
+  if(token&&entry.token!==token)return;
   jobs.delete(id);
   preparedOptions.delete(id);
   clearTimeout(entry.timer);

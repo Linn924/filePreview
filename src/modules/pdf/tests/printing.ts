@@ -1,6 +1,7 @@
 import { app, dialog, BrowserWindow, type WebContents } from "electron";
 import type { Suite } from "../../../../tests/context";
 import { longFixture } from './longFixture';
+import { encryptedFixture } from './encryptedFixture';
 const suite: Suite = async (c) => {
   const calls: Array<{
     paper: string;
@@ -10,6 +11,7 @@ const suite: Suite = async (c) => {
     copies: number;
     worker: number;
     landscape: boolean;
+    renderScale: number;
   }> = [];
   let failed = "";
   let hold = false;
@@ -33,7 +35,7 @@ const suite: Suite = async (c) => {
               release = resolve;
             });
           const data = await wc.executeJavaScript(
-            "(()=>{const pages=[...document.querySelectorAll('.print-sheet')];return{pages:pages.length,source:Number(pages[0]?.dataset.sourcePage),painted:pages.every(p=>p.querySelector('canvas').width>0)}})()",
+            "(()=>{const pages=[...document.querySelectorAll('.print-sheet')];return{pages:pages.length,source:Number(pages[0]?.dataset.sourcePage),scale:Number(pages[0]?.querySelector('canvas')?.dataset.renderScale),painted:pages.every(p=>{const c=p.querySelector('canvas'),i=p.querySelector('img');return c?c.width>0:i?i.complete&&i.naturalWidth>0:!!p.querySelector('section.docx')&&p.textContent.trim().length>0})}})()",
           );
           if (!data.painted) throw Error("Unrendered print page");
           const buffer = await wc.printToPDF({
@@ -58,6 +60,7 @@ const suite: Suite = async (c) => {
           calls.push({
             worker: wc.id,
             landscape: !!options?.landscape,
+            renderScale:data.scale,
             paper: String(options?.pageSize),
             pages: data.pages,
             source: data.source,
@@ -164,7 +167,7 @@ const suite: Suite = async (c) => {
       );
     await c.evaluate(
       win,
-      "(()=>{const r=document.querySelector('.print-range input');r.value='2';r.dispatchEvent(new Event('input',{bubbles:true}))})()",
+      "(()=>{const r=document.querySelector('.print-range input');r.value='2';r.dispatchEvent(new Event('input',{bubbles:true}));const s=document.querySelectorAll('.print-options select')[4];s.value='actual';s.dispatchEvent(new Event('change',{bubbles:true}))})()",
     );
     await c.click(win, ".pdf-print-panel .primary");
     await c.pause(400);
@@ -179,6 +182,9 @@ const suite: Suite = async (c) => {
       calls[1]?.pdfPages !== 1
     )
       throw Error("Page range " + JSON.stringify(calls));
+    if(Math.abs(calls[1].renderScale-150/72)>0.001)throw Error('Actual size must preserve 150 DPI original scale');
+    c.pass('actual-size print retains scale and clips to printable paper area');
+    await c.evaluate(win,"(()=>{const s=document.querySelectorAll('.print-options select')[4];s.value='fit';s.dispatchEvent(new Event('change',{bubbles:true}))})()");
     dialog.showOpenDialog = (async () => ({
       canceled: false,
       filePaths: [c.fixture("document.pdf")],
@@ -269,7 +275,8 @@ const suite: Suite = async (c) => {
     if (!release) throw Error("Print job not ready for stop test");
     const heldWorker = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('?print=1'));
     if (!heldWorker) throw Error('Missing active print worker');
-    await c.evaluate(heldWorker, 'window.localPreview.printReady()');
+    await c.evaluate(heldWorker, "window.localPreview.printReady('late failure','old-task-token')");
+    await c.evaluate(heldWorker, "window.localPreview.printReady(undefined,document.querySelector('.pdf-print-document').dataset.jobToken)");
     await c.click(
       win,
       ".pdf-print-panel footer button",
@@ -415,6 +422,31 @@ const suite: Suite = async (c) => {
     if (calls.length !== beforeBudget) throw Error('Oversized raster job reached printer');
     c.pass('print pixel budget rejects long PDF without submitting a job');
     c.close(budgetPanel); c.close(budgetPreview);
+    encryptedFixture(c.fixture('print-encrypted.pdf'));
+    const encrypted=await c.program.openPath(c.fixture('print-encrypted.pdf'));
+    await c.check(encrypted,'print sample asks for password','!!document.querySelector(".pdf-password")');
+    await c.evaluate(encrypted,"(()=>{const i=document.querySelector('.pdf-password input');i.value='secret';i.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('.pdf-password').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))})()");
+    await c.check(encrypted,'encrypted PDF ready for session-only printing',"!document.querySelector('.pdf-password')&&!!document.querySelector('.pdf-print-button:not(:disabled)')");
+    await c.click(encrypted,'.pdf-print-button');
+    const encryptedPanel=await waitPrintPanel();const beforeEncrypted=calls.length;
+    await c.check(encryptedPanel,'encrypted file row has loaded',"!!document.querySelector('.toggle-print-options')");
+    await c.click(encryptedPanel,'.toggle-print-options');
+    await c.check(encryptedPanel,'session password also unlocks print layout preview',"document.querySelector('.paper-layout-preview canvas')?.width>0 && !document.querySelector('.paper-layout-error')");
+    await c.check(encryptedPanel,'encrypted print entry ready',"!!document.querySelector('.print-go:not(:disabled)')");
+    await c.click(encryptedPanel,'.print-go');
+    await c.check(encryptedPanel,'unlocked PDF prints without persisting password',"document.querySelector('.print-status').textContent.includes('已提交到系统队列')");
+    if(calls.length!==beforeEncrypted+1)throw Error('Encrypted PDF did not print exactly once');
+    c.close(encryptedPanel);c.close(encrypted);
+    for(const name of ['image.png','document.docx']) {
+      const sharedPreview=await c.open(name);
+      await c.click(sharedPreview,'.file-print-button');
+      const sharedPanel=await waitPrintPanel();const beforeShared:number=calls.length;
+      await c.check(sharedPanel,name+' shared print ready',"!!document.querySelector('.print-go:not(:disabled)')");
+      await c.click(sharedPanel,'.print-go');
+      await c.check(sharedPanel,name+' shared print protocol still submits',"document.querySelector('.print-status').textContent.includes('已提交到系统队列')");
+      if(calls.length!==beforeShared+1||calls.at(-1)!.pdfPages<1)throw Error('Shared format print failed '+name);
+      c.close(sharedPanel);c.close(sharedPreview);
+    }
     await c.pause(1700);
     if (BrowserWindow.getAllWindows().some(w => w.webContents.getURL().includes('?print=1')))
       throw Error('Idle print worker was not released');

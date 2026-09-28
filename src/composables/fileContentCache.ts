@@ -5,8 +5,12 @@ import type { PreviewFile } from "../../shared/contracts";
  * Bytes persist until tab close or 512MB LRU budget.
  */
 const cache = new Map<string, PreviewFile>();
-const CACHE_BUDGET_BYTES = 512 * 1024 * 1024;
+let cacheBudgetBytes = 512 * 1024 * 1024;
 let cacheBytes = 0;
+export function setFileCacheBudget(bytes:number) {
+  cacheBudgetBytes=Math.max(1,bytes);
+  while(cacheBytes>cacheBudgetBytes&&cache.size>1)cacheDrop(cache.keys().next().value!);
+}
 
 export function cachePut(id: string, file: PreviewFile) {
   const prev = cache.get(id);
@@ -14,7 +18,7 @@ export function cachePut(id: string, file: PreviewFile) {
   cache.delete(id);
   cache.set(id, file);
   cacheBytes += file.bytes?.byteLength || 0;
-  while (cacheBytes > CACHE_BUDGET_BYTES && cache.size > 1) {
+  while (cacheBytes > cacheBudgetBytes && cache.size > 1) {
     const oldest = cache.keys().next().value as string | undefined;
     if (!oldest || oldest === id) break;
     const gone = cache.get(oldest);
@@ -24,7 +28,9 @@ export function cachePut(id: string, file: PreviewFile) {
 }
 
 export function cacheGet(id: string): PreviewFile | undefined {
-  return cache.get(id);
+  const hit = cache.get(id);
+  if (hit) { cache.delete(id); cache.set(id, hit); }
+  return hit;
 }
 
 export function cacheDrop(id: string) {

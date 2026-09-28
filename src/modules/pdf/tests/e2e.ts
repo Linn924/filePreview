@@ -446,6 +446,9 @@ const suite: Suite = async (c) => {
   await c.check(ctrlFWin,'search highlight exists before closing','!!document.querySelector(".pdf-hit")');
   await c.click(ctrlFWin,'.pdf-search-toggle');
   await c.check(ctrlFWin,'closing search clears results and highlights','!document.querySelector(".pdf-search-input,.pdf-hit,.pdf-page.has-hit")');
+  await c.click(ctrlFWin,'.pdf-rotate');
+  await c.pause(350);
+  await c.check(ctrlFWin,'rotated selectable text follows glyph direction',"(()=>{const s=[...document.querySelectorAll('.pdf-text-layer span')].find(s=>s.textContent.length>10);if(!s)return false;const r=s.getBoundingClientRect();return r.height>r.width*2})()");
   c.close(ctrlFWin);
 };
 export default suite;
