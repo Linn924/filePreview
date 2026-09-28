@@ -37,8 +37,10 @@ if (!args.includes("--skip-build"))
     process.platform === "win32",
   );
 run(process.execPath, ["--import", "tsx", "tests/unit.ts"]);
-if(selected.includes('pdf')||selected.includes('all'))
+if(selected.includes('pdf')||selected.includes('all')) {
   run(process.execPath,['--import','tsx','src/modules/pdf/tests/searchMemory.ts']);
+  run(process.execPath,['--import','tsx','src/modules/pdf/tests/optimization.ts']);
+}
 if (selected.includes('all') || selected.includes('excel'))
   run(process.execPath, ['--import', 'tsx', 'tests/excel-fallback.ts']);
 mkdirSync(".test-build", { recursive: true });

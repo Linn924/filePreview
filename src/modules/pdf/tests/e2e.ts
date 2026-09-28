@@ -4,15 +4,19 @@ import { longFixture } from "./longFixture";
 import {linkFixture} from './linkFixture';
 import {outlineFixture} from './outlineFixture';
 const suite: Suite = async (c) => {
-  async function dragAt(win:import('electron').BrowserWindow,selector:string,button:'left'|'middle',dx:number,dy:number){
+  async function dragAt(win:import('electron').BrowserWindow,selector:string,button:'left'|'middle',dx:number,dy:number,space=false){
     win.show();win.focus();await c.pause(150);
     const point=await c.evaluate<{x:number;y:number}>(win,`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.left+Math.min(160,r.width/2),y:r.top+Math.min(130,r.height/2)}})()`);
     win.webContents.debugger.attach('1.3');
     try{
+      if(space)await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent',{type:'keyDown',key:' ',code:'Space',windowsVirtualKeyCode:32});
       await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button,clickCount:1});
       await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x+dx,y:point.y+dy,button,buttons:button==='middle'?4:1});
       await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x+dx,y:point.y+dy,button,clickCount:1});
-    }finally{win.webContents.debugger.detach();}
+    }finally{
+      if(space)await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent',{type:'keyUp',key:' ',code:'Space',windowsVirtualKeyCode:32});
+      win.webContents.debugger.detach();
+    }
     await c.pause(180);
   }
   const win = await c.open("document.pdf");
@@ -44,10 +48,8 @@ const suite: Suite = async (c) => {
   await c.evaluate(pan,"(()=>{const r=document.querySelector('.pdf-scroll');r.scrollLeft=160;r.scrollTop=160})()");
   await dragAt(pan,'.pdf-scroll','middle',-80,-55);
   await c.check(pan,'middle-button drag pans PDF',"(()=>{const r=document.querySelector('.pdf-scroll');return r.scrollLeft>205&&r.scrollTop>185})()");
-  await c.evaluate(pan,"window.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',key:' ',bubbles:true,cancelable:true}))");
   const beforeSpace=await c.evaluate<number>(pan,"document.querySelector('.pdf-scroll').scrollLeft");
-  await dragAt(pan,'.pdf-scroll','left',-70,0);
-  await c.evaluate(pan,"window.dispatchEvent(new KeyboardEvent('keyup',{code:'Space',key:' ',bubbles:true}))");
+  await dragAt(pan,'.pdf-scroll','left',-70,0,true);
   await c.check(pan,'Space plus left drag pans PDF',`document.querySelector('.pdf-scroll').scrollLeft>${beforeSpace+35}`);
   c.close(pan);
   longFixture(c.fixture("long-mixed.pdf"));
@@ -439,6 +441,11 @@ const suite: Suite = async (c) => {
     "Ctrl+F opens PDF search bar",
     "!!document.querySelector('.pdf-search-input')",
   );
+  await c.evaluate(ctrlFWin,"(()=>{const i=document.querySelector('.pdf-search-input');i.value='Local';i.dispatchEvent(new Event('input',{bubbles:true}))})()");
+  await c.click(ctrlFWin,'.pdf-search-go');
+  await c.check(ctrlFWin,'search highlight exists before closing','!!document.querySelector(".pdf-hit")');
+  await c.click(ctrlFWin,'.pdf-search-toggle');
+  await c.check(ctrlFWin,'closing search clears results and highlights','!document.querySelector(".pdf-search-input,.pdf-hit,.pdf-page.has-hit")');
   c.close(ctrlFWin);
 };
 export default suite;

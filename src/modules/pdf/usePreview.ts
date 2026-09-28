@@ -230,24 +230,32 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
           scale: cssScale * ratio,
           rotation: (page.rotate + rotate.value) % 360,
         });
-        canvas.width = Math.max(1, Math.floor(viewport.width));
-        canvas.height = Math.max(1, Math.floor(viewport.height));
-        const context = canvas.getContext("2d", { alpha: false });
+        // Render offscreen, then blit: continuous zoom/resize keeps old pixels
+        // until the new bitmap is ready (avoids a long white flash).
+        const off = document.createElement("canvas");
+        off.width = Math.max(1, Math.floor(viewport.width));
+        off.height = Math.max(1, Math.floor(viewport.height));
+        const context = off.getContext("2d", { alpha: false });
         if (!context) return;
         context.fillStyle = "#fff";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        const task = page.render({ canvas, canvasContext: context, viewport });
+        context.fillRect(0, 0, off.width, off.height);
+        const task = page.render({ canvas: off, canvasContext: context, viewport });
         tasks.set(index, {task,canvas});
         try {
           await task.promise;
-          if (token === revision && inRenderRange(index)) {
-            rendered.set(index, canvas);
-            retries.delete(index);
-          }
+          if (disposed || token !== revision || !inRenderRange(index)) return;
+          canvas.width = off.width;
+          canvas.height = off.height;
+          const target = canvas.getContext("2d", { alpha: false });
+          if (!target) return;
+          target.drawImage(off, 0, 0);
+          rendered.set(index, canvas);
+          retries.delete(index);
         } finally {
-          if (rendered.get(index) !== canvas &&
-              (disposed || token !== revision || !inRenderRange(index)))
-            releaseCanvas(canvas);
+          off.width = 0;
+          off.height = 0;
+          // Keep the live bitmap when a newer refresh supersedes this task.
+          if (disposed) releaseCanvas(canvas);
           if (tasks.get(index)?.task === task) tasks.delete(index);
         }
       }))
@@ -316,7 +324,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit) {
       tasks.forEach(({task}) => task.cancel());
       await queue;
       if (disposed) return;
-      for (const canvas of rendered.values()) releaseCanvas(canvas);
+      // Keep current bitmaps on screen; render() replaces each page when ready.
       rendered.clear();
       await nextTick();
       updateVirtualWindow();

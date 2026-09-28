@@ -75,7 +75,9 @@ export function usePdfSearch(pdf: Ref<PDFDocumentProxy | undefined>) {
         }
         if(found.length!==hits.value.length &&
           (active.value === -1 || performance.now() - lastPublish >= 100 || n === doc.numPages)){
-          hits.value=[...found];
+          // Append only new hits; avoid re-copying the whole result list every tick.
+          const prev = hits.value.length;
+          hits.value = prev ? hits.value.concat(found.slice(prev)) : found.slice();
           lastPublish = performance.now();
           if(active.value===-1)active.value=0;
         }

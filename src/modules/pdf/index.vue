@@ -39,6 +39,7 @@ const {
 const search = usePdfSearch(pdf);
 provide("pdfAllowPrint", allowPrint);
 const searchOpen = ref(false);
+watch(searchOpen, open => { if (!open) search.clear(); });
 const navOpen = ref(false);
 const passwordInput = ref("");
 const {panning}=usePan(scroll);

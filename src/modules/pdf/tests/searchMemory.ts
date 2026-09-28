@@ -13,3 +13,26 @@ await search.run('missing');
 assert.equal(search.hits.value.length,0);
 assert.ok(search.cacheSize()<=32);
 console.log('PASS PDF search: 2400 hits across 120 pages, bounded text cache');
+
+let releaseText!: () => void;
+let started!: () => void;
+const extracting = new Promise<void>(resolve => { started = resolve; });
+const gate = new Promise<void>(resolve => { releaseText = resolve; });
+let reads = 0;
+const slow = {numPages:80,getPage:async()=>({getTextContent:async()=>{
+  reads++; started(); await gate; return {items:[{str:'cancel needle'}]};
+}})} as unknown as PDFDocumentProxy;
+const cancel = usePdfSearch(shallowRef(slow));
+const old = cancel.run('needle');
+await extracting;
+cancel.clear(); releaseText(); await old;
+assert.equal(reads,1,'clear must stop scanning additional pages');
+assert.equal(cancel.searching.value,false);
+assert.deepEqual(cancel.hits.value,[],'cancelled search cannot refill results');
+await cancel.run('cancel');
+assert.equal(cancel.hits.value.length,80,'new query must remain usable after cancellation');
+const stale = cancel.run('needle');
+const fresh = cancel.run('missing');
+await Promise.all([stale,fresh]);
+assert.deepEqual(cancel.hits.value,[],'old query cannot overwrite replacement');
+console.log('PASS PDF search cancellation: clear, restart and concurrent query replacement');

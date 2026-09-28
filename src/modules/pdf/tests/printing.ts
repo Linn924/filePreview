@@ -1,5 +1,6 @@
 import { app, dialog, BrowserWindow, type WebContents } from "electron";
 import type { Suite } from "../../../../tests/context";
+import { longFixture } from './longFixture';
 const suite: Suite = async (c) => {
   const calls: Array<{
     paper: string;
@@ -7,6 +8,8 @@ const suite: Suite = async (c) => {
     source: number;
     pdfPages: number;
     copies: number;
+    worker: number;
+    landscape: boolean;
   }> = [];
   let failed = "";
   let hold = false;
@@ -43,14 +46,18 @@ const suite: Suite = async (c) => {
           const box = buffer
             .toString("latin1")
             .match(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)/);
+          const dimensions = options?.pageSize === 'A5' ? [148,210] : [210,297];
+          if (options?.landscape) dimensions.reverse();
           if (
-            options?.pageSize === "A5" &&
+            ['A4','A5'].includes(String(options?.pageSize)) &&
             (!box ||
-              Math.abs(Number(box[1]) - (148 * 72) / 25.4) > 2 ||
-              Math.abs(Number(box[2]) - (210 * 72) / 25.4) > 2)
+              Math.abs(Number(box[1]) - (dimensions[0] * 72) / 25.4) > 2 ||
+              Math.abs(Number(box[2]) - (dimensions[1] * 72) / 25.4) > 2)
           )
-            throw Error("A5 physical paper dimensions incorrect");
+            throw Error("Selected paper/orientation dimensions incorrect");
           calls.push({
+            worker: wc.id,
+            landscape: !!options?.landscape,
             paper: String(options?.pageSize),
             pages: data.pages,
             source: data.source,
@@ -186,7 +193,7 @@ const suite: Suite = async (c) => {
     await c.click(win, ".print-files li:nth-child(2) .toggle-print-options");
     await c.evaluate(
       win,
-      "(()=>{const row=document.querySelectorAll('.print-files li')[1];const n=row.querySelector('input[type=number]');n.value='2';n.dispatchEvent(new Event('input',{bubbles:true}));})()",
+      "(()=>{const row=document.querySelectorAll('.print-files li')[1];const n=row.querySelector('input[type=number]');n.value='2';n.dispatchEvent(new Event('input',{bubbles:true}));const direction=row.querySelectorAll('.print-options select')[1];direction.value='true';direction.dispatchEvent(new Event('change',{bubbles:true}));})()",
     );
     await c.click(win, ".pdf-print-panel .primary");
     await c.pause(400);
@@ -197,11 +204,15 @@ const suite: Suite = async (c) => {
     );
     if (calls.length !== 4)
       throw Error("Batch queue did not submit exactly two jobs");
+    if (calls[2].worker !== calls[3].worker)
+      throw Error("Consecutive batch files must reuse the hidden print window");
+    c.pass("batch reuses hidden print window with isolated A5/A4 layouts");
     if (
       calls[2].paper !== "A5" ||
       calls[2].source !== 2 ||
       calls[2].pages !== 1 ||
       calls[3].paper !== "A4" ||
+      !calls[3].landscape || calls[2].landscape ||
       calls[3].pages !== 2 ||
       calls[3].copies !== 2
     )
@@ -256,6 +267,9 @@ const suite: Suite = async (c) => {
     );
     for (let i = 0; i < 100 && !release; i++) await c.pause(50);
     if (!release) throw Error("Print job not ready for stop test");
+    const heldWorker = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('?print=1'));
+    if (!heldWorker) throw Error('Missing active print worker');
+    await c.evaluate(heldWorker, 'window.localPreview.printReady()');
     await c.click(
       win,
       ".pdf-print-panel footer button",
@@ -389,6 +403,22 @@ const suite: Suite = async (c) => {
     c.close(panelNone);
     c.close(noneWin);
     await closePrintPanels();
+    c.program.updateSettings({printEntry:'current'});
+    longFixture(c.fixture('print-budget.pdf'));
+    const budgetPreview = await c.open('print-budget.pdf');
+    await c.click(budgetPreview,'.pdf-print-button');
+    const budgetPanel = await waitPrintPanel();
+    const beforeBudget = calls.length;
+    await c.check(budgetPanel,'budget print entry ready',"!!document.querySelector('.print-go:not(:disabled)')");
+    await c.click(budgetPanel,'.print-go');
+    await c.check(budgetPanel,'oversized raster job rejected with split-range guidance',"document.querySelector('.print-status')?.textContent.includes('页数较多')");
+    if (calls.length !== beforeBudget) throw Error('Oversized raster job reached printer');
+    c.pass('print pixel budget rejects long PDF without submitting a job');
+    c.close(budgetPanel); c.close(budgetPreview);
+    await c.pause(1700);
+    if (BrowserWindow.getAllWindows().some(w => w.webContents.getURL().includes('?print=1')))
+      throw Error('Idle print worker was not released');
+    c.pass('duplicate ready does not resubmit; idle print worker released');
     c.program.updateSettings({ printEntry: "all" });
   } finally {
     app.removeListener("web-contents-created", intercept);
