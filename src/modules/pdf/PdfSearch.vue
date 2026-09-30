@@ -3,6 +3,9 @@ import {nextTick,ref,watch} from 'vue';
 
 const props=defineProps<{
   target:string;
+  caseSensitive:boolean;
+  mode:import('./searchIndex').SearchMode;
+  notice:string;
   query: string;
   count: number;
   active: number;
@@ -14,6 +17,8 @@ const input=ref<HTMLInputElement>();
 watch(()=>props.open,async value=>{if(value){await nextTick();input.value?.focus();}});
 const emit = defineEmits<{
   "update:query": [string];
+  "update:caseSensitive": [boolean];
+  "update:mode": [import('./searchIndex').SearchMode];
   search: [];
   next: [];
   prev: [];
@@ -69,6 +74,10 @@ function submit(event: Event) {
         </svg>
         <span class="sr-only">查找</span>
       </button>
+      <button type="button" class="pdf-search-case" :aria-pressed="caseSensitive" aria-label="区分大小写" title="区分大小写" @click="emit('update:caseSensitive',!caseSensitive)">Aa</button>
+      <select class="pdf-search-mode" :value="mode" aria-label="搜索模式" @change="emit('update:mode',($event.target as HTMLSelectElement).value as import('./searchIndex').SearchMode)">
+        <option value="plain">普通文字</option><option value="wildcard">通配符 * ?</option><option value="regex">正则表达式</option>
+      </select>
       <span class="pdf-search-count" aria-live="polite">
         <template v-if="searching">搜索中…</template>
         <template v-else-if="query.trim()">
@@ -113,6 +122,7 @@ function submit(event: Event) {
         </svg>
         <span class="sr-only">清除</span>
       </button>
+      <span v-if="notice" class="pdf-search-notice" role="status">{{ notice }}</span>
       <span v-if="error" class="pdf-search-error" role="alert">{{ error }}</span>
       <button type="button" class="search-close" aria-label="关闭文档搜索" title="关闭搜索（Esc）" @click="emit('update:open',false)">关闭</button>
     </form>

@@ -28,6 +28,7 @@ interface OutlineNode {
   hasChildren: boolean;
 }
 const outline = ref<OutlineNode[]>([]);
+const outlineQuery=ref('');
 const collapsed = ref(new Set<string>());
 const outlineHost=ref<HTMLElement>();
 const thumbHost = ref<HTMLElement>();
@@ -107,6 +108,7 @@ async function loadOutline() {
 }
 
 function toggleOutline(key: string) {
+  if(outlineQuery.value.trim())return;
   const next = new Set(collapsed.value);
   if (next.has(key)) next.delete(key);
   else next.add(key);
@@ -123,9 +125,16 @@ function outlineHidden(item: OutlineNode) {
   return false;
 }
 
-const visibleOutline = computed(() =>
-  outline.value.filter((item) => !outlineHidden(item)),
-);
+const visibleOutline = computed(() => {
+  const query=outlineQuery.value.trim().toLocaleLowerCase();
+  if(!query)return outline.value.filter(item=>!outlineHidden(item));
+  const keep=new Set<string>();
+  for(const item of outline.value)if(item.title.toLocaleLowerCase().includes(query)){
+    keep.add(item.key);let parent=item.parentKey;
+    while(parent){keep.add(parent);parent=outlineByKey.value.get(parent)?.parentKey??null;}
+  }
+  return outline.value.filter(item=>keep.has(item.key));
+});
 
 const currentOutlineKey = computed(() => {
   let hit: string | null = null;
@@ -458,6 +467,8 @@ const hasOutline = computed(() => outline.value.length > 0);
       role="tabpanel"
       aria-label="目录"
     >
+      <label v-if="hasOutline" class="outline-filter"><span class="sr-only">搜索目录</span><input v-model="outlineQuery" aria-label="搜索目录" placeholder="搜索章节标题"/><button v-if="outlineQuery" type="button" aria-label="清除目录搜索" @click="outlineQuery=''">×</button></label>
+      <p v-if="hasOutline && !visibleOutline.length" class="pdf-nav-empty" role="status">没有匹配的章节</p>
       <p v-if="!hasOutline" class="pdf-nav-empty">本文档没有目录/书签</p>
       <template v-else>
         <div
@@ -471,6 +482,7 @@ const hasOutline = computed(() => outline.value.length > 0);
             v-if="item.hasChildren"
             type="button"
             class="outline-toggle icon-only-btn"
+            :disabled="!!outlineQuery.trim()"
             :title="collapsed.has(item.key) ? '展开' : '折叠'"
             :aria-label="collapsed.has(item.key) ? '展开' : '折叠'"
             @click="toggleOutline(item.key)"
@@ -478,7 +490,7 @@ const hasOutline = computed(() => outline.value.length > 0);
             <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
               <path
                 :d="
-                  collapsed.has(item.key) ? 'M5 3l5 5-5 5' : 'M3 5l5 5 5-5'
+                  !outlineQuery.trim() && collapsed.has(item.key) ? 'M5 3l5 5-5 5' : 'M3 5l5 5 5-5'
                 "
               />
             </svg>
@@ -492,7 +504,7 @@ const hasOutline = computed(() => outline.value.length > 0);
             @click="item.page && emit('jump', item.page)"
           >
             {{ item.title }}
-            <small v-if="item.page">p.{{ item.page }}</small>
+            <small v-if="item.page" class="outline-page" :aria-label="'第 '+item.page+' 页'">{{ item.page }}</small>
           </button>
         </div>
       </template>

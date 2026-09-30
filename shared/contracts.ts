@@ -114,6 +114,7 @@ export function normalizeSettings(
   };
 }
 export interface DesktopBridge {
+  exportPdfNotes(id:string,name:string,data:Uint8Array):Promise<'saved'|'cancelled'>;
   pdfResources(): Promise<{pixels:number;bytes:number;documents:number}>;
   releasePdfResources(): void;
   onPdfResources(handler:(budget:{pixels:number;bytes:number;documents:number})=>void):()=>void;
@@ -131,7 +132,7 @@ export interface DesktopBridge {
   openPrintQueue(): Promise<string>;
   dropPrintPdfs(files:File[]):Promise<PreviewFile[]>;
   selectPrintPdfs(): Promise<PreviewFile[]>;
-  printPdf(job: import("./printing").PdfPrintJob): Promise<string>;
+  printPdf(job: import("./printing").PdfPrintJob): Promise<import("./printing").PrintSubmitResult>;
   consumePrint(): Promise<import("./printing").PdfPrintJob>;
   printReady(error?: string, token?: string): Promise<void>;
   setFullscreen(value: boolean): Promise<boolean>;

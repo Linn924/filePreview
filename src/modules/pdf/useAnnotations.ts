@@ -1,6 +1,8 @@
 import {ref,watch,computed,onBeforeUnmount} from 'vue';
 import type {PreviewFile,PdfTemporaryMark} from '../../../shared/contracts';
 
+import {mergeNoteRects,rotateNoteRect} from './annotationGeometry';
+
 type Rect=PdfTemporaryMark['rects'][number];
 export function useAnnotations(file:PreviewFile){
  const notes=ref<PdfTemporaryMark[]>(file.view?.pdfNotes?.map(mark=>({...mark,rects:mark.rects.map(rect=>({...rect}))}))||[]);
@@ -21,14 +23,14 @@ export function useAnnotations(file:PreviewFile){
    pending.value=null;return;
   }
   const box=page.getBoundingClientRect();
-  const rects=Array.from(selection.getRangeAt(0).getClientRects()).slice(0,80).flatMap(rect=>{
+  const rects=Array.from(selection.getRangeAt(0).getClientRects()).flatMap(rect=>{
    const x0=Math.max(rect.left,box.left),x1=Math.min(rect.right,box.right);
    const y0=Math.max(rect.top,box.top),y1=Math.min(rect.bottom,box.bottom);
    return x1-x0>2&&y1-y0>2?[{x:(x0-box.left)/box.width,y:(y0-box.top)/box.height,width:(x1-x0)/box.width,height:(y1-y0)/box.height}]:[];
   });
   const quote=selection.toString().trim().slice(0,240);
   const index=Number(page.dataset.page);
-  pending.value=rects.length&&quote&&Number.isFinite(index)?{page:index+1,quote,rotation,rects}:null;
+  pending.value=rects.length&&quote&&Number.isFinite(index)?{page:index+1,quote,rotation,rects:mergeNoteRects(rects,2/box.width,2/box.height)}:null;
  }
  function add(kind:PdfTemporaryMark['kind']){
   if(!pending.value)return;
@@ -40,10 +42,7 @@ export function useAnnotations(file:PreviewFile){
  const byPage=computed(()=>{const map=new Map<number,PdfTemporaryMark[]>();for(const note of notes.value){let page=map.get(note.page);if(!page){page=[];map.set(note.page,page);}page.push(note);}return map;});
  const onPage=(page:number)=>byPage.value.get(page)||[];
  function rectStyle(mark:PdfTemporaryMark,rect:Rect,rotation:PdfTemporaryMark['rotation']){
-  const delta=(rotation-mark.rotation+360)%360;
-  const converted=delta===90?{x:1-rect.y-rect.height,y:rect.x,width:rect.height,height:rect.width}
-   :delta===180?{x:1-rect.x-rect.width,y:1-rect.y-rect.height,width:rect.width,height:rect.height}
-   :delta===270?{x:rect.y,y:1-rect.x-rect.width,width:rect.height,height:rect.width}:rect;
+  const converted=rotateNoteRect(rect,mark.rotation,rotation);
   return {left:converted.x*100+'%',top:converted.y*100+'%',width:converted.width*100+'%',height:converted.height*100+'%'};
  }
  return {notes,pending,capture,add,remove,onPage,rectStyle};

@@ -1,3 +1,4 @@
+export interface PrintSubmitResult { status:'submitted'|'cancelled'|'failed'; reason?:string }
 import type { PreviewFile } from "./contracts";
 export interface Printer {
   name: string;

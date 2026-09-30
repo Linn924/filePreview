@@ -20,6 +20,7 @@ const names = [
   "bench",
   "pdfperf",
   "pdfchain",
+  "pdfenhancements",
   "visual",
 ];
 if (selected.some((s) => s !== "all" && !names.includes(s)))
@@ -39,8 +40,9 @@ if (!args.includes("--skip-build"))
     process.platform === "win32",
   );
 run(process.execPath, ["--import", "tsx", "tests/unit.ts"]);
-if(selected.includes('pdf')||selected.includes('pdfperf')||selected.includes('pdfchain')||selected.includes('all')) {
+if(selected.includes('pdfenhancements')||selected.includes('pdf')||selected.includes('pdfperf')||selected.includes('pdfchain')||selected.includes('all')) {
   run(process.execPath,['--import','tsx','src/modules/pdf/tests/searchMemory.ts']);
+  run(process.execPath,['--import','tsx','src/modules/pdf/tests/enhancementsUnit.ts']);
   run(process.execPath,['--import','tsx','src/modules/pdf/tests/optimization.ts']);
 }
 if (selected.includes('all') || selected.includes('excel'))

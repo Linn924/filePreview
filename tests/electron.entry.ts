@@ -17,11 +17,14 @@ import text from "../src/modules/text/tests/e2e";
 import image from "../src/modules/image/tests/e2e";
 import bench from "../src/modules/pdf/tests/bench";
 import pdfperf from "../src/modules/pdf/tests/performance";
+import pdfenhancements from '../src/modules/pdf/tests/enhancements';
 import pdfchain from '../src/modules/pdf/tests/chain';
 const profile = path.resolve("work/test-profiles/" + process.pid);
 mkdirSync(profile, { recursive: true });
 app.setPath("userData", profile);
 app.on("browser-window-created", (_event, win) => {
+  // Test windows must keep processing frame-based UI checks while chat covers them.
+  win.webContents.setBackgroundThrottling(false);
   win.webContents.on("preload-error", (_e, p, error) =>
     console.error("PRELOAD", p, error),
   );
@@ -48,6 +51,7 @@ const suites: Record<string, Suite> = {
   bench,
   pdfperf,
   pdfchain,
+  pdfenhancements,
 };
 const requested = process.argv[process.argv.indexOf("--suite") + 1] || "all";
 const selected =

@@ -8,10 +8,14 @@ import PdfSearch from "./PdfSearch.vue";
 import PdfNav from "./PdfNav.vue";
 import {usePan} from './usePan';
 import {useAnnotations} from './useAnnotations';
+import {exportAnnotatedPage} from './exportNotes';
 import PdfNotes from './PdfNotes.vue';
-import { pageTextContent } from './textCache';
+import { pageTextContent, mappedPdfText } from './textCache';
 import { Util } from 'pdfjs-dist';
 const props = defineProps<PreviewProps>();
+const presentation=ref(false);
+let priorFullscreen=false;
+let fullscreenCleanup:(()=>void)|undefined;
 const emit = defineEmits<{
   ready: [];
   error: [message: string];
@@ -36,7 +40,7 @@ const {
   textGeometry,
   setRotate,
   allowPrint,
-} = usePreview(props, emit,(allowed,password)=>publishPrintPermission?.(allowed,password));
+} = usePreview(props, emit,(allowed,password)=>publishPrintPermission?.(allowed,password),presentation);
 const search = usePdfSearch(pdf);
 const publishPrintPermission=inject<(allowed:boolean,password?:string)=>void>('pdf:set-print-permission');
 watch(allowPrint,value=>publishPrintPermission?.(value),{immediate:true});
@@ -44,9 +48,24 @@ const searchOpen = ref(false);
 watch(searchOpen, open => { if (!open) search.clear(); });
 const navOpen = ref(false);
 const passwordInput = ref("");
-const {panning}=usePan(scroll);
+const {panning}=usePan(scroll,computed(()=>!presentation.value));
 const annotations=useAnnotations(props.file);
 const notesOpen=ref(false);
+const exporting=ref(false),exportStatus=ref('');
+const exportController=new AbortController();
+async function exportNotes(){
+  const doc=pdf.value;if(!doc||exporting.value)return;
+  exporting.value=true;exportStatus.value='';
+  const page=current.value;
+  const notes=annotations.onPage(page).map(note=>({...note,rects:note.rects.map(rect=>({...rect}))}));
+  try {
+    const data=await exportAnnotatedPage(doc,page,rotate.value,notes,exportController.signal);
+    if(exportController.signal.aborted)return;
+    const result=await window.localPreview.exportPdfNotes(props.file.id,props.file.name.replace(/\.pdf$/i,'')+'-第'+page+'页-批注.png',data);
+    exportStatus.value=result==='saved'?'已保存当前页批注图片。':'已取消保存。';
+  } catch(error){if(!exportController.signal.aborted)exportStatus.value=error instanceof Error?error.message:String(error);}
+  finally {exporting.value=false;}
+}
 function captureNotes(){if(!panning.value)annotations.capture(scroll.value??null,rotate.value);}
 function addMark(kind:'highlight'|'note'){
  annotations.add(kind);
@@ -91,14 +110,13 @@ async function runSearch() {
 function markHitsInLayer(layer: HTMLElement, hit: SearchHit | undefined) {
   if (!hit) return;
   const spans = Array.from(layer.querySelectorAll<HTMLElement>("span"));
-  // Map page-text char offsets approximately onto sequential spans.
-  let cursor = 0;
+  clearHitMarks();
   let activeSet = false;
   for (const span of spans) {
     const text = span.textContent || "";
-    const start = cursor;
-    const end = cursor + text.length;
-    cursor = end + 1; // pageText joins with single spaces
+    const start = Number(span.dataset.textStart);
+    const end = Number(span.dataset.textEnd);
+    if(!Number.isFinite(start)||!Number.isFinite(end))continue;
     const s = hit.charOffset;
     const e = hit.charOffset + hit.length;
     if (e <= start || s >= end) continue;
@@ -206,9 +224,11 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
       height?: number;
       fontName?:string;
     }>;
+    const offsets=new Map(mappedPdfText(content).items.map(item=>[item.index,item]));
     let fragment=document.createDocumentFragment();
     let batch=0;
-    for (const item of items) {
+    for (let itemIndex=0;itemIndex<items.length;itemIndex++) {
+      const item=items[itemIndex];
       if(textDisposed||!layer.isConnected||layer.dataset.loading!==revision||revision!==String(textGeometryRevision))return;
       if (!item.str) continue;
       const tx = Util.transform(viewport.transform,item.transform);
@@ -218,6 +238,8 @@ async function buildTextLayer(pageEl: HTMLElement, index: number) {
       const ascent=fontH*(font?.ascent??(font?.descent!==undefined?1+font.descent:0.8));
       const span = document.createElement("span");
       span.textContent = item.str;
+      const offset=offsets.get(itemIndex)!;
+      span.dataset.textStart=String(offset.start);span.dataset.textEnd=String(offset.end);
       const style = span.style;
       style.left = tx[4]+ascent*Math.sin(angle) + "px";
       style.top = tx[5]-ascent*Math.cos(angle) + "px";
@@ -328,31 +350,64 @@ watch(textGeometry, () => {
   textGeometryRevision++;
   scheduleText();
 });
-// Keyboard: PageDown / PageUp to jump pages (item 9 — keep)
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === "PageDown") {
-    event.preventDefault();
-    jump(current.value + 1);
-  } else if (event.key === "PageUp") {
-    event.preventDefault();
-    jump(current.value - 1);
-  }
+const activePdf=()=>presentation.value||!!scroll.value?.closest<HTMLElement>('.preview-tab')&&getComputedStyle(scroll.value.closest<HTMLElement>('.preview-tab')!).display!=='none';
+const editable=(target:EventTarget|null)=>target instanceof HTMLElement&&!!target.closest('input,textarea,select,[contenteditable="true"]');
+async function togglePresentation(value=!presentation.value,restore=true){
+  if(value===presentation.value)return;
+  if(value){priorFullscreen=document.documentElement.classList.contains('immersive');searchOpen.value=false;presentation.value=true;document.documentElement.classList.add('pdf-presentation-active');
+    try{await window.localPreview.setFullscreen(true);}catch{presentation.value=false;document.documentElement.classList.remove('pdf-presentation-active');}
+  } else {presentation.value=false;document.documentElement.classList.remove('pdf-presentation-active');if(restore)await window.localPreview.setFullscreen(priorFullscreen);}
+  await nextTick();scroll.value?.focus();
 }
+function onKeydown(event:KeyboardEvent){
+  if(!activePdf()||editable(event.target)||event.altKey||event.metaKey)return;
+  if(event.ctrlKey&&event.shiftKey&&event.key.toLowerCase()==='p'){event.preventDefault();event.stopImmediatePropagation();void togglePresentation();return;}
+  if(presentation.value){
+    if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();void togglePresentation(false);}
+    else if(['ArrowRight','ArrowDown','PageDown',' '].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();jump(current.value+1);}
+    else if(['ArrowLeft','ArrowUp','PageUp'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();jump(current.value-1);}
+    else if(event.ctrlKey&&['Tab','f','p'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();}
+  }
+  let handled=true;
+  if(event.key==='Home')jump(1);
+  else if(event.key==='End')jump(pages.value.length);
+  else if(!presentation.value&&event.key==='PageDown')jump(current.value+1);
+  else if(!presentation.value&&event.key==='PageUp')jump(current.value-1);
+  else if(!presentation.value&&event.ctrlKey&&['=','+','-','0'].includes(event.key))emit('update:zoom',event.key==='0'?100:Math.max(25,Math.min(400,props.zoom+(event.key==='-'?-10:10))));
+  else if(!event.ctrlKey&&event.key.toLowerCase()==='r')setRotate(((rotate.value+(event.shiftKey?270:90))%360) as 0|90|180|270);
+  else handled=false;
+  if(handled){event.preventDefault();event.stopPropagation();}
+}
+function onWheel(event:WheelEvent){
+  if(presentation.value){event.preventDefault();return;}
+  if(!event.ctrlKey||event.deltaY===0)return;
+  event.preventDefault();emit('update:zoom',Math.max(25,Math.min(400,props.zoom+(event.deltaY<0?10:-10))));
+}
+function presentationClick(event:MouseEvent){
+  if(!presentation.value||event.button!==0)return;
+  event.preventDefault();jump(current.value+1);
+}
+function presentationBack(event:MouseEvent){if(presentation.value){event.preventDefault();jump(current.value-1);}}
 function handleOpenSearch(e: Event) {
   if ((e as CustomEvent<string>).detail !== props.file.id) return;
   searchOpen.value = true;
 }
 onMounted(() => {
   window.addEventListener("pdf:open-search", handleOpenSearch);
+  window.addEventListener('keydown',onKeydown,true);
+  fullscreenCleanup=window.localPreview.onFullscreen(value=>{if(!value&&presentation.value)void togglePresentation(false,false);});
 });
 onBeforeUnmount(() => {
+  fullscreenCleanup?.();window.removeEventListener('keydown',onKeydown,true);
+  if(presentation.value){document.documentElement.classList.remove('pdf-presentation-active');void window.localPreview.setFullscreen(priorFullscreen);}
+  exportController.abort();
   textDisposed=true;textGeometryRevision++;textController.abort();cancelAnimationFrame(textFrame);
   measureCanvas.width=0;measureCanvas.height=0;
   window.removeEventListener("pdf:open-search", handleOpenSearch);
 });
 </script>
 <template>
-  <section class="pdf-pane">
+  <section class="pdf-pane" :class="{'pdf-presentation':presentation}" :aria-label="presentation?'PDF 演示模式（Esc 退出）':'PDF 预览'">
     <Teleport
       :to="`[data-file-id='${props.file.id}'] .module-tools`"
       defer
@@ -366,6 +421,11 @@ onBeforeUnmount(() => {
           :active="search.active.value"
           :searching="search.searching.value"
           :error="search.error.value"
+          :notice="search.notice.value"
+          :case-sensitive="search.caseSensitive.value"
+          :mode="search.mode.value"
+          @update:case-sensitive="v=>{search.caseSensitive.value=v;void runSearch()}"
+          @update:mode="v=>{search.mode.value=v;void runSearch()}"
           @update:query="(v) => (search.query.value = v)"
           @search="runSearch"
           @next="search.next()"
@@ -399,6 +459,7 @@ onBeforeUnmount(() => {
           </svg>
           <span class="sr-only">旋转 {{ rotate }}°</span>
         </button>
+        <button type="button" class="pdf-present" title="演示模式（Ctrl+Shift+P，Esc 退出）" aria-label="演示模式" @click="togglePresentation()">演示</button>
         <button type="button" class="pdf-notes-toggle icon-only-btn" :aria-pressed="notesOpen" :title="'本次批注（'+annotations.notes.value.length+'）'" aria-label="本次批注" @click="notesOpen=!notesOpen"><svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 12.5h10M4 9l6.5-6.5 2 2L6 11H4z"/></svg></button>
         <button v-if="annotations.pending.value" type="button" class="pdf-mark-highlight" @click="addMark('highlight')">高亮</button>
         <button v-if="annotations.pending.value" type="button" class="pdf-mark-note" @click="addMark('note')">写备注</button>
@@ -423,19 +484,21 @@ onBeforeUnmount(() => {
     </form>
     <div v-else class="pdf-body">
       <PdfNav
-        v-if="navOpen && pdf"
+        v-if="navOpen && pdf && !presentation"
         :pdf="pdf"
         :current="current"
         @jump="jump"
       />
-      <PdfNotes v-if="notesOpen" :notes="annotations.notes.value" @jump="jump" @remove="annotations.remove"/>
+      <PdfNotes v-if="notesOpen && !presentation" :notes="annotations.notes.value" :can-export="!!pdf && !!annotations.onPage(current).length" :exporting="exporting" :export-status="exportStatus" @export="exportNotes" @jump="jump" @remove="annotations.remove"/>
       <div
         ref="scroll"
         class="pdf-scroll"
         :class="{'is-panning':panning}"
         tabindex="0"
         @scroll.passive="sync"
-        @keydown="onKeydown"
+        @wheel="onWheel"
+        @click="presentationClick"
+        @contextmenu="presentationBack"
         @mouseup="captureNotes"
       >
         <div v-if="padTop > 0" class="pdf-virtual-pad" :style="{ height: padTop + 'px' }" aria-hidden="true"></div>

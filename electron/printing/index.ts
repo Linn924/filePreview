@@ -3,11 +3,11 @@ import path from "node:path";
 import { randomUUID } from 'node:crypto';
 import { trusted, protectWindow } from "../security";
 import { preparePreviewFile,loadPreparedFile,retainPreparedFiles,discardUnownedFiles } from "../files";
-import { validatePrintOptions, type PdfPrintJob } from "../../shared/printing";
+import { validatePrintOptions, type PdfPrintJob, type PrintSubmitResult } from "../../shared/printing";
 interface ActiveJob {
   owner: number;
   job?: PdfPrintJob;
-  resolve: () => void;
+  resolve: (result:PrintSubmitResult) => void;
   reject: (e: Error) => void;
   window: BrowserWindow;
   timer: ReturnType<typeof setTimeout>;
@@ -94,7 +94,7 @@ export function setupPrinting(local: Session) {
     const printers = await event.sender.getPrintersAsync();
     if (!printers.some((p) => p.name === options.deviceName))
       throw Error("打印机不可用，请重新选择。");
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<PrintSubmitResult>((resolve, reject) => {
           if (owner.isDestroyed()) {
             reject(Error("预览窗口已关闭。"));
             return;
@@ -138,9 +138,9 @@ export function setupPrinting(local: Session) {
             job: { file, options, token },
             window: win,
             timer,
-            resolve: () => {
+            resolve: (result) => {
               owner.removeListener("destroyed", abort);
-              resolve();
+              resolve(result);
             },
             reject: (e) => {
               owner.removeListener("destroyed", abort);
@@ -152,9 +152,8 @@ export function setupPrinting(local: Session) {
             .catch((e) => finish(id, e,token));
         });
     });
-    queue = run.catch(() => {});
-    await run;
-    return "submitted";
+    queue = run.then(()=>{},()=>{});
+    return await run;
   });
   ipcMain.handle("print:consume", (event) => {
     trusted(event);
@@ -196,27 +195,16 @@ export function setupPrinting(local: Session) {
       },
       (success, reason) => {
         if (jobs.get(event.sender.id) !== entry) return;
-        finish(
-          event.sender.id,
-          success
-            ? undefined
-            : Error(
-                reason === "Print job canceled"
-                  ? "打印已取消。"
-                  : reason === "Invalid printer settings" ||
-                      /paper|size|settings/i.test(String(reason || ""))
-                    ? `当前打印机可能不支持 ${options.paper}，请改用 A4 或在驱动中启用 ${options.paper}。`
-                    : `打印任务提交失败（${reason || "未知原因"}）。若纸张为 ${options.paper}，请确认打印机驱动已支持该尺寸。`,
-              ),
-          token,
-        );
+        const cancelled=/^(cancelled|canceled|print job cancel(?:led|ed))$/i.test(String(reason||'').trim());
+        const result:PrintSubmitResult=success?{status:'submitted'}:cancelled?{status:'cancelled'}:{status:'failed',reason:String(reason||'未知驱动错误')};
+        finish(event.sender.id,success?undefined:Error(reason||'打印提交未完成'),token,result);
       },
     );
   });
 }
 import type { PdfPrintOptions } from "../../shared/printing";
 const preparedOptions = new Map<number, PdfPrintOptions>();
-function finish(id: number, error?: Error,token?:string) {
+function finish(id: number, error?: Error,token?:string,result?:PrintSubmitResult) {
   const entry = jobs.get(id);
   if (!entry) return;
   if(token&&entry.token!==token)return;
@@ -235,5 +223,5 @@ function finish(id: number, error?: Error,token?:string) {
       }
     }, 1500);
   }
-  error ? entry.reject(error) : entry.resolve();
+  result ? entry.resolve(result) : error ? entry.reject(error) : entry.resolve({status:'submitted'});
 }

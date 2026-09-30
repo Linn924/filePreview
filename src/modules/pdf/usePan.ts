@@ -1,7 +1,7 @@
 import {onBeforeUnmount,onMounted,ref,watch,type Ref} from 'vue';
 
 /** Space + left drag and middle-button drag pan the PDF scroll surface. */
-export function usePan(scroll:Ref<HTMLElement|undefined>){
+export function usePan(scroll:Ref<HTMLElement|undefined>,enabled:Ref<boolean>=ref(true)){
  const panning=ref(false);
  let spaceHeld=false;
  let pointer=-1;
@@ -12,7 +12,7 @@ export function usePan(scroll:Ref<HTMLElement|undefined>){
   !!target.closest('input,textarea,select,button,[contenteditable="true"]');
  const down=(event:PointerEvent)=>{
   const root=scroll.value;
-  if(!root||!(event.button===1||(spaceHeld&&event.button===0)))return;
+  if(!enabled.value||!root||!(event.button===1||(spaceHeld&&event.button===0)))return;
   event.preventDefault();
   pointer=event.pointerId;
   origin={x:event.clientX,y:event.clientY,left:root.scrollLeft,top:root.scrollTop};
@@ -30,7 +30,7 @@ export function usePan(scroll:Ref<HTMLElement|undefined>){
   pointer=-1;panning.value=false;
  };
  const keydown=(event:KeyboardEvent)=>{
-  if(event.code==='Space'&&!editable(event.target)&&!event.ctrlKey&&!event.altKey&&!event.metaKey){
+  if(enabled.value&&!event.defaultPrevented&&event.code==='Space'&&!editable(event.target)&&!event.ctrlKey&&!event.altKey&&!event.metaKey){
    spaceHeld=true;event.preventDefault();scroll.value?.classList.add('pan-ready');
   }
  };
@@ -54,6 +54,7 @@ export function usePan(scroll:Ref<HTMLElement|undefined>){
   root?.addEventListener('auxclick',preventAux);
   if(spaceHeld)root?.classList.add('pan-ready');
  }
+ watch(enabled,value=>{if(!value)blur();});
  onMounted(()=>{
   stopWatching=watch(scroll,root=>bind(root),{immediate:true,flush:'post'});
   window.addEventListener('keydown',keydown);

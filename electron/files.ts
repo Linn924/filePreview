@@ -103,6 +103,8 @@ export async function loadPreparedFile(file: PreviewFile): Promise<PreviewFile> 
 }
 
 export function releasePreparedFile(id: string) { selectedPaths.delete(id);passwords.delete(id);readControllers.get(id)?.abort(); }
+export function ownsPreparedFile(owner:number,id:string){return references.get(id)?.has(owner)??false;}
+export function isPreparedSourcePath(filePath:string){const target=path.resolve(filePath).toLowerCase();return [...selectedPaths.values()].some(source=>path.resolve(source).toLowerCase()===target);}
 export function preparedFileCount() { return selectedPaths.size; }
 
 /** 直接读取文件的完整字节（供打印等场景使用）。 */

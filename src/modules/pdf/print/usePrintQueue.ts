@@ -11,6 +11,7 @@ export interface PrintRow {
   selected: boolean;
   expanded: boolean;
   status: string;
+  statusKind: 'waiting'|'submitted'|'cancelled'|'failed';
 }
 export function usePrintQueue(initial?: PreviewFile) {
   const row = (file: PreviewFile): PrintRow => ({
@@ -19,6 +20,7 @@ export function usePrintQueue(initial?: PreviewFile) {
     selected: true,
     expanded:false,
     status: file.error || "等待",
+    statusKind:file.error?'failed':'waiting',
   });
   const files = ref<PrintRow[]>(initial ? [row(initial)] : []),
     deviceName = ref(""),
@@ -55,7 +57,7 @@ export function usePrintQueue(initial?: PreviewFile) {
         file: toRaw(r.file),
         options: { ...toRaw(r.options), deviceName: deviceName.value },
       }));
-    for (const r of files.value) r.status = r.selected ? "等待" : "未勾选";
+    for (const r of files.value) {r.status = r.selected ? "等待" : "未勾选";r.statusKind='waiting';}
     batchProgress.value = `0/${jobs.length}`;
     try {
       let done = 0;
@@ -66,18 +68,20 @@ export function usePrintQueue(initial?: PreviewFile) {
           continue;
         }
         if (job.file.error) {
+          job.row.statusKind='failed';
           job.row.status = "失败：" + job.file.error;
           continue;
         }
         job.row.status = "正在准备并提交";
         try {
-          await window.localPreview.printPdf({
+          const result=await window.localPreview.printPdf({
             file: job.file,
             options: job.options,
           });
-          job.row.status =
-            "已提交到系统队列（是否出纸以队列/打印机为准）";
+          job.row.statusKind=result.status;
+          job.row.status = result.status==='submitted'?'已提交到系统队列（是否出纸以队列/打印机为准）':result.status==='cancelled'?'用户已取消':'驱动提交受阻：'+(result.reason||'未知原因');
         } catch (e) {
+          job.row.statusKind='failed';
           job.row.status = "失败：" + printError(e);
         }
         done++;

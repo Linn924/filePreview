@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, shell, webUtils } from "electron";
 import type { DesktopBridge, Settings } from "../shared/contracts";
 
 const bridge: DesktopBridge = {
+  exportPdfNotes:(id,name,data)=>ipcRenderer.invoke('pdf:export-notes',id,name,data),
   pdfResources:()=>ipcRenderer.invoke('pdf:resources'),
   releasePdfResources:()=>ipcRenderer.send('pdf:resources-release'),
   onPdfResources:handler=>{

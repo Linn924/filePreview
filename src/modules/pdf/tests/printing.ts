@@ -14,6 +14,7 @@ const suite: Suite = async (c) => {
     renderScale: number;
   }> = [];
   let failed = "";
+  let callbackReason:string|undefined;
   let hold = false;
   let release: (() => void) | undefined;
   const realDialog = dialog.showOpenDialog;
@@ -67,7 +68,7 @@ const suite: Suite = async (c) => {
             pdfPages: count,
             copies: options?.copies || 1,
           });
-          callback?.(true, "");
+          const reason=callbackReason;callbackReason=undefined;callback?.(!reason,reason||'');
         } catch (e) {
           failed = String(e);
           callback?.(false, failed);
@@ -447,6 +448,17 @@ const suite: Suite = async (c) => {
       if(calls.length!==beforeShared+1||calls.at(-1)!.pdfPages<1)throw Error('Shared format print failed '+name);
       c.close(sharedPanel);c.close(sharedPreview);
     }
+    const resultPreview=await c.open('document.pdf');
+    await c.click(resultPreview,'.pdf-print-button');
+    const resultPanel=await waitPrintPanel();
+    await c.check(resultPanel,'print callback status test ready',"!!document.querySelector('.print-go:not(:disabled)')");
+    callbackReason='cancelled';await c.click(resultPanel,'.print-go');
+    await c.check(resultPanel,'driver cancellation has distinct neutral status',"document.querySelector('.print-status.cancelled')?.textContent==='用户已取消'");
+    callbackReason='Driver port unavailable';await c.click(resultPanel,'.print-go');
+    await c.check(resultPanel,'driver failure preserves callback reason',"document.querySelector('.print-status.failed')?.textContent.includes('驱动提交受阻：Driver port unavailable')");
+    await c.click(resultPanel,'.print-go');
+    await c.check(resultPanel,'print can retry after callback failure',"document.querySelector('.print-status.submitted')?.textContent.includes('已提交到系统队列')");
+    c.close(resultPanel);c.close(resultPreview);
     await c.pause(1700);
     if (BrowserWindow.getAllWindows().some(w => w.webContents.getURL().includes('?print=1')))
       throw Error('Idle print worker was not released');

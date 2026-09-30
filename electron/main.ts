@@ -1,4 +1,5 @@
 import {setupPrintWindow} from "./printing/window";
+import { setupPdfExport } from './pdfExport';
 import { setupPrinting } from "./printing";
 import { setupPdfResources,pdfResourceStats } from './pdfResources';
 import { setupFullscreen, trackFullscreen } from "./fullscreen";
@@ -247,6 +248,7 @@ export const ready = owner
       setupFullscreen();
       local = await createLocalSession(path.resolve(__dirname, "../dist"));
       setupPrinting(local);
+      setupPdfExport();
       setupPdfResources();
       setupPrintWindow(local, async (files) => {
         const win = createWindow(true);

@@ -7,7 +7,7 @@ import { pdfWork } from "./workQueue";
 import { PageIndex } from './pageIndex';
 import { cachedPageSize, rememberPageSize, pageSize } from './metadata';
 import { pdfResources } from './resources';
-import { allocatePdfCanvas, availablePdfPixels, releasePdfCanvas } from './canvasPool';
+import { allocatePdfCanvas, availablePdfPixels, releasePdfCanvas, prunePdfCanvases } from './canvasPool';
 import {
   onMounted,
   onBeforeUnmount,
@@ -30,7 +30,7 @@ const OVERSCAN = 2;
 const PAGE_GAP = 24;
 const SCROLL_PADDING = 26;
 
-export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermission?:(allowed:boolean,password?:string)=>void) {
+export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermission?:(allowed:boolean,password?:string)=>void,presentation=ref(false)) {
   GlobalWorkerOptions.workerSrc = workerUrl;
   const scroll = ref<HTMLElement>();
   const layout = ref(0);
@@ -55,11 +55,14 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
   let scanningSizes = false;
   let bootstrapRevision=0;
   let scrollFrame = 0;
+  let visibility:MutationObserver|undefined;
+  let idleWarmup=0;
+  let warmupController=new AbortController();
   const lifetime = new AbortController();
   let generation = new AbortController();
   let positions = new PageIndex([]);
   let lastGeometry='';
-  const geometryKey=()=>[props.zoom,props.fitMode,rotate.value,scroll.value?.clientWidth,props.fitMode==='page'?scroll.value?.clientHeight:0].join(':');
+  const geometryKey=()=>[presentation.value,props.zoom,props.fitMode,rotate.value,scroll.value?.clientWidth,props.fitMode==='page'?scroll.value?.clientHeight:0].join(':');
   const ownedCanvases = new Set<HTMLCanvasElement>();
   const rendered = new Map<number, HTMLCanvasElement>();
   const tasks = new Map<number, {task:RenderTask;canvas:HTMLCanvasElement}>();
@@ -82,13 +85,13 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
       height,
       (scroll.value?.clientWidth || 850) - 60,
       (scroll.value?.clientHeight || 700) - 48,
-      props.fitMode || "original",
+      presentation.value?"page":props.fitMode || "original",
       Math.min(
         Math.max(200, (scroll.value?.clientWidth || 850) - 60) / width,
         1.5,
       ),
     ) *
-      props.zoom) /
+      (presentation.value?100:props.zoom)) /
     100;
   function pageCss(index: number) {
     void layout.value;
@@ -111,16 +114,19 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
   }
   const virtualStart = ref(0);
   const virtualEnd = ref(1);
-  const padTop = computed(() => offsetAt(virtualStart.value));
+  const padTop = computed(() => presentation.value?0:offsetAt(virtualStart.value));
   const padBottom = computed(() => {
+    if(presentation.value)return 0;
     return Math.max(0, offsetAt(pages.value.length) - offsetAt(virtualEnd.value));
   });
   const visiblePages = computed(() => {
+    if(presentation.value)return pages.value.length?[current.value-1]:[];
     const out: number[] = [];
     for (let i = virtualStart.value; i < virtualEnd.value; i++) out.push(i);
     return out;
   });
   function updateVirtualWindow() {
+    if(presentation.value)return;
     const root = scroll.value;
     const n = pages.value.length;
     if (!root || !n) {
@@ -138,17 +144,33 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
     if (scrollFrame) return;
     scrollFrame = requestAnimationFrame(() => {
       scrollFrame = 0;
-      if (!disposed) updateVirtualWindow();
+      if (!disposed) {updateVirtualWindow();scheduleWarmup();}
     });
+  }
+  function scheduleWarmup() {
+    if(disposed||!pdf||pdf.numPages<100)return;
+    cancelIdleCallback(idleWarmup);warmupController.abort();warmupController=new AbortController();
+    const signal=warmupController.signal,doc=pdf,center=current.value;
+    idleWarmup=requestIdleCallback(()=>{
+      void (async()=>{
+        for(let distance=1;distance<=10;distance++)for(const n of [center+distance,center-distance]){
+          if(disposed||signal.aborted||pdf!==doc)return;
+          if(n<1||n>doc.numPages||cachedPageSize(doc,n))continue;
+          try {const size=await pageSize(doc,n,5,signal);if(!disposed&&!signal.aborted)await updateSizes([{index:n-1,...size}]);}
+          catch(error){if((error as Error).name==='AbortError')return;}
+        }
+      })();
+    },{timeout:500});
   }
   function jump(value: number) {
     const n = pages.value.length;
     const index = Math.max(0, Math.min(n, Math.floor(value) || 1) - 1);
     const root = scroll.value;
     if (!root || !n) return;
+    if(presentation.value){current.value=index+1;root.scrollTop=0;scheduleWarmup();return;}
     root.scrollTop = Math.max(0, offsetAt(index));
     current.value = index + 1;
-    updateVirtualWindow();
+    updateVirtualWindow();scheduleWarmup();
   }
 
   function updateSizes(updates:Array<{index:number;width:number;height:number}>) {
@@ -207,8 +229,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
     pending.add(index);
     const token = revision;
     const signal = generation.signal;
-    queue = queue
-      .then(() => pdfWork(0, async () => {
+    // Submit all visible pages together; serialize per-canvas ownership via pending.
+    const job = pdfWork(Math.min(0.9,Math.abs(index+1-current.value)*0.1), async () => {
         if(scroll.value)scroll.value.dataset.pdfStage='render-work';
         if (disposed || token !== revision || !pdf || !inRenderRange(index))
           return;
@@ -247,9 +269,10 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
         if (!context) { releasePdfCanvas(off);return; }
         context.fillStyle = "#fff";
         context.fillRect(0, 0, off.width, off.height);
-        const task = page.render({ canvas: off, canvasContext: context, viewport });
-        tasks.set(index, {task,canvas});
+        let task:RenderTask|undefined;
         try {
+          task = page.render({ canvas: off, canvasContext: context, viewport });
+          tasks.set(index, {task,canvas});
           if(scroll.value)scroll.value.dataset.pdfStage='render-task';
           await task.promise;
           if(scroll.value)scroll.value.dataset.pdfStage='render-pixels';
@@ -267,7 +290,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
           if (disposed) releaseCanvas(canvas);
           if (tasks.get(index)?.task === task) tasks.delete(index);
         }
-      },signal))
+      },signal)
       .catch((e) => {
         if (!disposed && token===revision && e?.name !== "RenderingCancelledException" && e?.name!=='AbortError') {
           failed.add(index);
@@ -284,10 +307,12 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
           if(attempts<=8)requestAnimationFrame(()=>{if(!disposed)void render(index);});
         }
       });
-    return queue;
+    queue=Promise.allSettled([queue,job]).then(()=>{});
+    return job;
   }
 
   function observe() {
+    prunePdfCanvases();
     observer?.disconnect();
     for(const canvas of ownedCanvases) {
       if(!canvas.isConnected || !scroll.value?.contains(canvas))releaseCanvas(canvas);
@@ -317,7 +342,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
       },
       { root: scroll.value, rootMargin: "600px" },
     );
-    for (let i = virtualStart.value; i < virtualEnd.value; i++) {
+    for (const i of visiblePages.value) {
       const el = pageEl(i);
       if (el) observer.observe(el);
     }
@@ -416,6 +441,9 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
         resize = createSafeResizeObserver(scheduleRefresh);
         resize.observe(scroll.value);
       }
+      const tab=scroll.value?.closest('.preview-tab');
+      if(tab&&!visibility){visibility=new MutationObserver(()=>{prunePdfCanvases();if(getComputedStyle(tab).display!=='none'){scheduleRefresh();scheduleWarmup();}});visibility.observe(tab,{attributes:true,attributeFilter:['style','class']});}
+      scheduleWarmup();
       emit("ready");
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       if (scanningSizes) return;
@@ -464,6 +492,8 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
     if (!disposed && pdf) observe();
   });
 
+  watch(current,async()=>{if(presentation.value){await nextTick();observe();}});
+  watch(presentation,async()=>{await refresh();await nextTick();jump(current.value);});
   onMounted(() => void bootstrap());
   watch(
     () => props.zoom,
@@ -481,7 +511,7 @@ export function usePreview(props: PreviewProps, emit: PreviewEmit, publishPermis
   );
   onBeforeUnmount(() => {
     disposed = true;
-    lifetime.abort();generation.abort();
+    lifetime.abort();generation.abort();warmupController.abort();cancelIdleCallback(idleWarmup);visibility?.disconnect();
     clearTimeout(refreshTimer);
     cancelAnimationFrame(scrollFrame);
     revision++;

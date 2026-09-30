@@ -46,7 +46,8 @@ export function protectWindow(win: BrowserWindow): void {
   win.webContents.on("before-input-event", (event, input) => {
     if (
       (input.control || input.meta) &&
-      ["s", "p"].includes(input.key.toLowerCase())
+      ["s", "p"].includes(input.key.toLowerCase()) &&
+      !(input.shift && input.key.toLowerCase() === "p")
     )
       event.preventDefault();
   });

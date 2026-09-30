@@ -1,34 +1,38 @@
 import { watch } from 'vue';
 import { pdfResources } from './resources';
-type Entry={canvas:HTMLCanvasElement;temporary:boolean};
+type Entry={canvas:HTMLCanvasElement;temporary:boolean;pixels:number};
 const canvases = new Map<HTMLCanvasElement,Entry>();
-const pixels=(canvas:HTMLCanvasElement)=>canvas.width*canvas.height;
+let totalPixels=0;
 function publish() {
   if(typeof document==='undefined')return;
-  const value=pdfCanvasStats();
-  document.documentElement.dataset.pdfCanvasPixels=String(value.pixels);
-  document.documentElement.dataset.pdfCanvasBudget=String(value.budget);
+  document.documentElement.dataset.pdfCanvasPixels=String(totalPixels);
+  document.documentElement.dataset.pdfCanvasBudget=String(pdfResources.value.pixels);
 }
-export function releasePdfCanvas(canvas:HTMLCanvasElement) { canvases.delete(canvas);canvas.width=0;canvas.height=0;publish(); }
-function prune() {
+export function releasePdfCanvas(canvas:HTMLCanvasElement) {
+  totalPixels-=canvases.get(canvas)?.pixels??0;canvases.delete(canvas);
+  canvas.width=0;canvas.height=0;publish();
+}
+/** Call after DOM/visibility changes, outside allocation/query hot paths. */
+export function prunePdfCanvases() {
   for(const entry of canvases.values()) {
     if(entry.temporary)continue;
     const tab=entry.canvas.closest<HTMLElement>('.preview-tab');
     if(!entry.canvas.isConnected||(tab&&getComputedStyle(tab).display==='none'))releasePdfCanvas(entry.canvas);
   }
 }
-export function pdfCanvasStats() { return {count:canvases.size,pixels:[...canvases.keys()].reduce((n,c)=>n+pixels(c),0),budget:pdfResources.value.pixels}; }
+export function pdfCanvasStats() { return {count:canvases.size,pixels:totalPixels,budget:pdfResources.value.pixels}; }
 export function availablePdfPixels(canvas?:HTMLCanvasElement) {
-  prune();return Math.max(0,pdfResources.value.pixels-pdfCanvasStats().pixels+(canvas&&canvases.has(canvas)?pixels(canvas):0));
+  return Math.max(0,pdfResources.value.pixels-totalPixels+(canvas?canvases.get(canvas)?.pixels??0:0));
 }
 export function allocatePdfCanvas(canvas:HTMLCanvasElement,width:number,height:number,temporary=false) {
-  if(width*height>availablePdfPixels(canvas))return false;
-  canvas.width=width;canvas.height=height;canvases.set(canvas,{canvas,temporary});publish();return true;
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||width*height>availablePdfPixels(canvas))return false;
+  totalPixels-=canvases.get(canvas)?.pixels??0;
+  canvas.width=width;canvas.height=height;canvases.set(canvas,{canvas,temporary,pixels:width*height});totalPixels+=width*height;publish();return true;
 }
 watch(pdfResources,()=>{
-  prune();
+  prunePdfCanvases();
   for(const entry of canvases.values()) {
-    if(pdfCanvasStats().pixels<=pdfResources.value.pixels)break;
+    if(totalPixels<=pdfResources.value.pixels)break;
     if(!entry.temporary)releasePdfCanvas(entry.canvas);
   }
   publish();

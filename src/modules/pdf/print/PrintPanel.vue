@@ -333,7 +333,7 @@ const orderLabel = (o?: string) =>
             </div>
           </div>
           <div class="print-file-bottom">
-            <span class="print-status">{{ row.status }}</span
+            <span class="print-status" :class="row.statusKind">{{ row.status }}</span
             ><button
               class="apply-print-all"
               :disabled="busy"
